@@ -1,204 +1,35 @@
-import type { Dataset, Hex, TxHandle } from "../types";
+import type { ActivityEvent, BillFields, ChainViewRow, Dataset, Hex, Listing, Purchase } from "../types";
 import type { DataLayer } from "../data-layer";
-import { HARDHAT_CHAIN_ID } from "@/lib/constants";
-import { ReadableTxError, WRONG_NETWORK_REASON } from "@/lib/tx-errors";
+import { MIN_BILLS_TO_LIST } from "@/lib/constants";
+import { isCategoryId } from "@/lib/categories";
+import { ReadableTxError, REVERT_REASONS } from "@/lib/tx-errors";
+import {
+  accountFor,
+  allActivity,
+  allListings,
+  beforeRead,
+  nextId,
+  nextTxHash,
+  pushActivity,
+  seededAccount,
+  stubNow,
+  stubTx,
+  type Account,
+  type StubOptions,
+} from "./store";
+import { handleFor, ownerTag } from "./seed";
 
-export type SeedMode = "demo" | "empty";
-
-export interface StubOptions {
-  address?: Hex;
-  chainId?: number;
-  latency?: { readMs?: number; signMs?: number; confirmMs?: number };
-}
-
-// ---- demo controls (external store) ----
-
-interface ControlsSnapshot {
-  failNext: boolean;
-  failNextRead: boolean;
-  seedMode: SeedMode;
-}
-
-let controls: ControlsSnapshot = { failNext: false, failNextRead: false, seedMode: "demo" };
-const listeners = new Set<() => void>();
-
-function updateControls(patch: Partial<ControlsSnapshot>) {
-  const next = { ...controls, ...patch };
-  if (
-    next.failNext === controls.failNext &&
-    next.failNextRead === controls.failNextRead &&
-    next.seedMode === controls.seedMode
-  ) {
-    return;
-  }
-  controls = next; // new identity only when a value changed
-  listeners.forEach((cb) => cb());
-}
-
-// ---- in-memory store, keyed by lowercase address, seeded lazily ----
-
-const store = new Map<string, Dataset[]>();
-
-let txCounter = 0;
-let blockCounter = 1000n;
-
-function clearStore() {
-  store.clear();
-}
-
-export const stubControls = {
-  getSnapshot(): ControlsSnapshot {
-    return controls;
-  },
-  setFailNext(v: boolean) {
-    updateControls({ failNext: v });
-  },
-  setFailNextRead(v: boolean) {
-    updateControls({ failNextRead: v });
-  },
-  setSeedMode(m: SeedMode) {
-    clearStore(); // the next read reseeds in the new mode, even when the mode did not change
-    if (m === controls.seedMode) {
-      listeners.forEach((cb) => cb());
-      return;
-    }
-    updateControls({ seedMode: m });
-  },
-  subscribe(cb: () => void): () => void {
-    listeners.add(cb);
-    return () => {
-      listeners.delete(cb);
-    };
-  },
-};
-
-/** Tests only: back to a clean store and default controls. */
-export function resetStubStore(): void {
-  clearStore();
-  txCounter = 0;
-  blockCounter = 1000n;
-  controls = { failNext: false, failNextRead: false, seedMode: "demo" };
-  listeners.forEach((cb) => cb());
-}
-
-// ---- seed data (fixed timestamps: no Date.now in the seed) ----
-
-const DAY_MS = 24 * 60 * 60 * 1000;
-const SEED_BASE = Date.UTC(2026, 9, 20, 9, 0, 0); // 20 Oct 2026
-
-function seedDatasets(owner: Hex): Dataset[] {
-  return [
-    {
-      id: "household-utilities-2026",
-      name: "Household utilities 2026",
-      owner,
-      billCount: 1,
-      status: "open",
-      categories: [0],
-      createdAt: SEED_BASE,
-    },
-    {
-      id: "groceries-q3",
-      name: "Groceries Q3",
-      owner,
-      billCount: 3,
-      status: "open",
-      categories: [1, 4],
-      createdAt: SEED_BASE + 2 * DAY_MS,
-    },
-    {
-      id: "medical-and-pharmacy",
-      name: "Medical and pharmacy",
-      owner,
-      billCount: 4,
-      status: "listed",
-      categories: [2, 5],
-      createdAt: SEED_BASE + 4 * DAY_MS,
-      listingId: "listing-medical-and-pharmacy",
-      priceWei: 50_000_000_000_000_000n, // 0.05 ETH
-    },
-  ];
-}
-
-function datasetsFor(address: Hex): Dataset[] {
-  const key = address.toLowerCase();
-  let rows = store.get(key);
-  if (!rows) {
-    rows = controls.seedMode === "demo" ? seedDatasets(address.toLowerCase() as Hex) : [];
-    store.set(key, rows);
-  }
-  return rows;
-}
-
-// ---- latency ----
-
-/** Deterministic 400 to 900 ms derived from the address, so runs feel the same every time. */
-function readDelayMs(address: Hex | undefined, override?: number): number {
-  if (override !== undefined) return override;
-  const s = (address ?? "0x").toLowerCase();
-  let h = 0;
-  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
-  return 400 + (h % 501);
-}
-
-function wait(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-async function beforeRead(address: Hex | undefined, override?: number): Promise<void> {
-  await wait(readDelayMs(address, override));
-  if (controls.failNextRead) {
-    updateControls({ failNextRead: false });
-    throw new Error("Simulated read failure.");
-  }
-}
-
-// ---- transactions ----
-
-/** Deterministic fake hash: "0x" plus 64 hex characters derived from a counter. */
-function fakeHash(n: number): Hex {
-  let h = (n * 2654435761) >>> 0;
-  let out = "";
-  while (out.length < 64) {
-    h = (Math.imul(h ^ (h >>> 15), 2246822507) + 3266489909) >>> 0;
-    out += h.toString(16).padStart(8, "0");
-  }
-  return `0x${out.slice(0, 64)}` as Hex;
-}
-
-interface StubTxOptions {
-  chainId?: number;
-  latency?: StubOptions["latency"];
-  /** Runs when the receipt arrives; the store changes only here. Returns the created id, if any. */
-  apply: () => string | undefined;
-}
-
-/**
- * Simulates one write. Refuses a wrong chain first (NetworkGate normally blocks the UI before
- * this; it mirrors viem ChainMismatchError). The sign delay is the "awaiting signature" phase,
- * the confirm delay is "pending". The store changes only once the receipt resolves.
- */
-async function stubTx(opts: StubTxOptions): Promise<TxHandle> {
-  if (opts.chainId !== undefined && opts.chainId !== HARDHAT_CHAIN_ID) {
-    throw new ReadableTxError(WRONG_NETWORK_REASON, "wrong_network");
-  }
-  await wait(opts.latency?.signMs ?? 1200);
-  if (controls.failNext) {
-    updateControls({ failNext: false });
-    throw new ReadableTxError("Simulated failure: execution reverted.", "reverted");
-  }
-  const hash = fakeHash(++txCounter);
-  return {
-    hash,
-    async wait() {
-      await wait(opts.latency?.confirmMs ?? 1500);
-      const createdId = opts.apply();
-      return { status: "success", blockNumber: blockCounter++, ...(createdId ? { createdId } : {}) };
-    },
-  };
-}
+export { stubControls, resetStubStore, type SeedMode, type StubOptions } from "./store";
 
 const NAME_ERROR = "Give your dataset a name (1 to 60 characters).";
+const TITLE_ERROR = "Give your listing a title (1 to 80 characters).";
+const DESCRIPTION_ERROR = "Keep the description to 300 characters or fewer.";
+const NOT_CONNECTED = "Connect your wallet to continue.";
+
+/** A rule the stub enforces the way the contract will: readable reason, code "reverted". */
+function revert(reason: string): ReadableTxError {
+  return new ReadableTxError(reason, "reverted");
+}
 
 function slugify(name: string): string {
   const slug = name
@@ -208,39 +39,281 @@ function slugify(name: string): string {
   return slug || "dataset";
 }
 
-// ---- the layer ----
+function copyDataset(d: Dataset): Dataset {
+  return { ...d, categories: [...d.categories] };
+}
+
+function copyListing(l: Listing): Listing {
+  return { ...l, categories: [...l.categories] };
+}
+
+function newestFirst<T>(rows: T[], at: (row: T) => number): T[] {
+  return rows
+    .map((row, i) => ({ row, i }))
+    .sort((a, b) => at(b.row) - at(a.row) || a.i - b.i)
+    .map((x) => x.row);
+}
+
+function findOwned(acct: Account, datasetId: string): Dataset {
+  const dataset = acct.datasets.find((d) => d.id === datasetId);
+  if (!dataset) throw revert("Dataset not found.");
+  return dataset;
+}
 
 export function createStubDataLayer(opts: StubOptions): DataLayer {
   const { address, latency } = opts;
+
+  function requireAddress(): Hex {
+    if (!address) throw new ReadableTxError(NOT_CONNECTED);
+    return address;
+  }
+
+  function event(kind: ActivityEvent["kind"], actor: Hex, extra: Partial<ActivityEvent>): ActivityEvent {
+    return { id: `evt-${nextId()}`, kind, actor, txHash: nextTxHash(), at: stubNow(), ...extra };
+  }
+
+  /** The buy rules, checked before signing and again when the receipt lands. */
+  function checkBuy(buyer: Hex, listingId: string, expectedPriceWei: bigint): Listing {
+    const listing = allListings().get(listingId);
+    if (!listing) throw revert("Listing not found.");
+    if (listing.seller.toLowerCase() === buyer.toLowerCase()) throw revert(REVERT_REASONS.OwnListing);
+    if (seededAccount(buyer).purchases.some((p) => p.listingId === listingId)) {
+      throw revert(REVERT_REASONS.AlreadyPurchased);
+    }
+    if (expectedPriceWei !== listing.priceWei) throw revert(REVERT_REASONS.PriceChanged);
+    return listing;
+  }
+
   return {
+    // ---- reads ----
+
+    async listListings() {
+      await beforeRead(address, latency?.readMs);
+      if (address) seededAccount(address);
+      return newestFirst([...allListings().values()], (l) => l.listedAt).map(copyListing);
+    },
+
+    async getListing(id) {
+      await beforeRead(address, latency?.readMs);
+      if (address) seededAccount(address);
+      const listing = allListings().get(id);
+      return listing ? copyListing(listing) : null;
+    },
+
+    async hasAccess(listingId) {
+      await beforeRead(address, latency?.readMs);
+      if (!address) return false;
+      return seededAccount(address).purchases.some((p) => p.listingId === listingId && p.hasAccess);
+    },
+
     async listMyDatasets() {
       await beforeRead(address, latency?.readMs);
       if (!address) return [];
-      return datasetsFor(address).map((d) => ({ ...d, categories: [...d.categories] }));
+      return seededAccount(address).datasets.map(copyDataset);
     },
+
+    async getDataset(id) {
+      await beforeRead(address, latency?.readMs);
+      if (!address) return null;
+      const dataset = seededAccount(address).datasets.find((d) => d.id === id);
+      return dataset ? copyDataset(dataset) : null;
+    },
+
+    async getSellerStats() {
+      await beforeRead(address, latency?.readMs);
+      if (!address) return { datasets: 0, listings: 0, sales: 0, withdrawableWei: 0n };
+      const acct = seededAccount(address);
+      return {
+        datasets: acct.datasets.length,
+        listings: acct.datasets.filter((d) => d.status === "listed").length,
+        sales: acct.sales,
+        withdrawableWei: acct.withdrawableWei,
+      };
+    },
+
+    async listMyPurchases() {
+      await beforeRead(address, latency?.readMs);
+      if (!address) return [];
+      const rows: Purchase[] = seededAccount(address).purchases.map((p) => ({ ...p }));
+      return newestFirst(rows, (p) => p.purchasedAt);
+    },
+
+    async listActivity() {
+      await beforeRead(address, latency?.readMs);
+      if (address) seededAccount(address);
+      return newestFirst(allActivity(), (e) => e.at).map((e) => ({ ...e }));
+    },
+
+    async getChainView(datasetId) {
+      await beforeRead(address, latency?.readMs);
+      if (!address) return [];
+      const dataset = seededAccount(address).datasets.find((d) => d.id === datasetId);
+      if (!dataset) return [];
+      const owner = address.toLowerCase();
+      const rows: ChainViewRow[] = [];
+      for (let index = 0; index < dataset.billCount; index++) {
+        rows.push({
+          index,
+          amountHandle: handleFor(owner, datasetId, index, "amount"),
+          categoryHandle: handleFor(owner, datasetId, index, "category"),
+          dateHandle: handleFor(owner, datasetId, index, "date"),
+        });
+      }
+      return rows;
+    },
+
+    // ---- writes: validate first, then sign, then change the store only when the receipt lands ----
 
     async createDataset({ name }) {
       const trimmed = name.trim();
       if (trimmed.length < 1 || trimmed.length > 60) throw new ReadableTxError(NAME_ERROR);
-      if (!address) throw new ReadableTxError("Connect your wallet to continue.");
+      const me = requireAddress();
       return stubTx({
         chainId: opts.chainId,
         latency,
         apply: () => {
-          const rows = datasetsFor(address);
+          const rows = seededAccount(me).datasets;
           const base = slugify(trimmed);
           let id = base;
           for (let n = 2; rows.some((d) => d.id === id); n++) id = `${base}-${n}`;
           rows.push({
             id,
             name: trimmed,
-            owner: address.toLowerCase() as Hex,
+            owner: me.toLowerCase() as Hex,
             billCount: 0,
             status: "open",
             categories: [],
-            createdAt: Date.now(),
+            createdAt: stubNow(),
           });
           return id;
+        },
+      });
+    },
+
+    async addBill(datasetId: string, bill: BillFields) {
+      const me = requireAddress();
+      const check = () => {
+        const dataset = findOwned(seededAccount(me), datasetId);
+        if (dataset.status !== "open") {
+          throw revert("This dataset is sealed. Create a new dataset to add more bills.");
+        }
+        return dataset;
+      };
+      check();
+      if (bill.amountCents <= 0n) throw revert("Enter an amount greater than 0.");
+      if (!isCategoryId(bill.category)) throw revert("Choose one of the six categories.");
+      if (!Number.isInteger(bill.dateDays) || bill.dateDays < 0) throw revert("Enter a valid bill date.");
+      return stubTx({
+        chainId: opts.chainId,
+        latency,
+        apply: () => {
+          const dataset = check();
+          dataset.billCount += 1;
+          if (!dataset.categories.includes(bill.category)) {
+            dataset.categories = [...dataset.categories, bill.category].sort((a, b) => a - b);
+          }
+          return undefined;
+        },
+      });
+    },
+
+    async listDataset(datasetId, input) {
+      const me = requireAddress();
+      const title = input.title.trim();
+      const description = input.description.trim();
+      const check = () => {
+        const dataset = findOwned(seededAccount(me), datasetId);
+        if (dataset.status === "listed") throw revert("This dataset is already listed.");
+        if (dataset.status === "sealed") throw revert("This dataset is sealed. Create a new dataset to add more bills.");
+        if (dataset.billCount < MIN_BILLS_TO_LIST) {
+          throw revert(`Add at least ${MIN_BILLS_TO_LIST} bills before listing. This dataset has ${dataset.billCount}.`);
+        }
+        return dataset;
+      };
+      check();
+      if (input.priceWei <= 0n) throw revert("Enter a price greater than 0 ETH.");
+      if (title.length < 1 || title.length > 80) throw revert(TITLE_ERROR);
+      if (description.length > 300) throw revert(DESCRIPTION_ERROR);
+      return stubTx({
+        chainId: opts.chainId,
+        latency,
+        apply: () => {
+          const dataset = check();
+          const listingId = `listing-${dataset.id}-${ownerTag(me)}`;
+          const listing: Listing = {
+            id: listingId,
+            datasetId: dataset.id,
+            seller: me.toLowerCase() as Hex,
+            title,
+            description,
+            priceWei: input.priceWei,
+            recordCount: dataset.billCount,
+            categories: [...dataset.categories],
+            listedAt: stubNow(),
+          };
+          allListings().set(listingId, listing);
+          dataset.status = "listed";
+          dataset.listingId = listingId;
+          dataset.priceWei = input.priceWei;
+          pushActivity(event("listed", me, { listingId, title, amountWei: input.priceWei }));
+          return listingId;
+        },
+      });
+    },
+
+    async buyListing(listingId, expectedPriceWei) {
+      const me = requireAddress();
+      checkBuy(me, listingId, expectedPriceWei);
+      return stubTx({
+        chainId: opts.chainId,
+        latency,
+        apply: () => {
+          const listing = checkBuy(me, listingId, expectedPriceWei);
+          const purchase: Purchase = {
+            listingId,
+            title: listing.title,
+            seller: listing.seller,
+            priceWei: listing.priceWei,
+            txHash: nextTxHash(),
+            purchasedAt: stubNow(),
+            hasAccess: true,
+          };
+          seededAccount(me).purchases.unshift(purchase);
+          const seller = accountFor(listing.seller);
+          seller.sales += 1;
+          seller.withdrawableWei += listing.priceWei;
+          pushActivity({
+            id: `evt-${nextId()}`,
+            kind: "purchased",
+            actor: me,
+            listingId,
+            title: listing.title,
+            amountWei: listing.priceWei,
+            txHash: purchase.txHash,
+            at: purchase.purchasedAt,
+          });
+          return undefined;
+        },
+      });
+    },
+
+    async withdraw() {
+      const me = requireAddress();
+      const check = () => {
+        const acct = seededAccount(me);
+        if (acct.withdrawableWei <= 0n) throw revert("Nothing to withdraw yet.");
+        return acct;
+      };
+      check();
+      return stubTx({
+        chainId: opts.chainId,
+        latency,
+        apply: () => {
+          const acct = check();
+          const amount = acct.withdrawableWei;
+          acct.withdrawableWei = 0n;
+          pushActivity(event("withdrawn", me, { amountWei: amount }));
+          return undefined;
         },
       });
     },
