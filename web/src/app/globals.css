@@ -43,3 +43,37 @@ body {
     animation: none !important;
   }
 }
+
+@keyframes opaquely-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes opaquely-pulse {
+  50% {
+    opacity: 0.5;
+  }
+}
+
+.spinner-spin {
+  animation: opaquely-spin 0.9s linear infinite;
+}
+
+.skeleton-pulse {
+  animation: opaquely-pulse 1.5s ease-in-out infinite;
+}
+
+/* The spinner shows a rotating arc; under reduced motion it becomes a static full ring. */
+.spinner-ring {
+  display: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spinner-arc {
+    display: none;
+  }
+  .spinner-ring {
+    display: inline;
+  }
+}
