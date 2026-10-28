@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
+import { NetworkBadge } from "@/components/NetworkBadge";
 
 export function AppHeader() {
   return (
@@ -10,6 +11,7 @@ export function AppHeader() {
         Opaquely
       </Link>
       <div className="flex items-center gap-4">
+        <NetworkBadge />
         <ConnectButton showBalance={false} accountStatus={{ smallScreen: "avatar", largeScreen: "address" }} />
       </div>
     </header>
