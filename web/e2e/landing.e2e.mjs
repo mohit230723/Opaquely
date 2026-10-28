@@ -1,4 +1,13 @@
-// Landing: the hero (size, live WebGL2 context), and the CTAs.
+// Landing: the hero (size, live WebGL2 context), the CTAs, and the "How it works" explainer.
+
+const STEPS = [
+  ["Upload", "Add a bill photo. It stays in your browser."],
+  ["OCR", "Text is read on your device. Nothing goes to a server."],
+  ["Encrypt", "Amount, category and date are encrypted before they leave."],
+  ["Compute", "The contract adds up encrypted totals without decrypting."],
+  ["List", "Seal the dataset and set a price in test ETH."],
+  ["Buy", "Buyers pay once and get access to the aggregates only."],
+];
 
 export default async function landing({ baseUrl, accounts, assert, waitForWallet, newPage }) {
   // Disconnected, 1280x900.
@@ -28,6 +37,14 @@ export default async function landing({ baseUrl, accounts, assert, waitForWallet
   await anon.getByRole("button", { name: "Start selling" }).click();
   await anon.getByRole("dialog").getByText("Connect a Wallet").waitFor({ state: "visible", timeout: 15_000 });
   await anon.keyboard.press("Escape");
+
+  // LAND-02: "How it works" lists the six steps with their lines.
+  await anon.getByRole("heading", { name: "How it works" }).waitFor({ state: "visible", timeout: 10_000 });
+  for (const [title, line] of STEPS) {
+    await anon.getByRole("heading", { name: title, exact: true }).waitFor({ state: "attached", timeout: 10_000 });
+    await anon.getByText(line, { exact: true }).waitFor({ state: "attached", timeout: 10_000 });
+  }
+  assert((await anon.locator("ol > li").count()) === 6, "expected six steps in the ordered list");
 
   // Connected seller with a stored seller role goes straight to /sell.
   const seller = await newPage({ account: accounts.seller, roles: { [accounts.seller]: "seller" } });
