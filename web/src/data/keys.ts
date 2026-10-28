@@ -9,4 +9,11 @@ function scoped(name: string, scope: DataScope, ...ids: string[]): string[] {
 export const queryKeys = {
   myDatasets: (scope: DataScope) => scoped("my-datasets", scope),
   sellerStats: (scope: DataScope) => scoped("seller-stats", scope),
+  dataset: (scope: DataScope, id: string) => scoped("dataset", scope, id),
+  listings: (scope: DataScope) => scoped("listings", scope),
+  listing: (scope: DataScope, id: string) => scoped("listing", scope, id),
+  hasAccess: (scope: DataScope, listingId: string) => scoped("has-access", scope, listingId),
+  myPurchases: (scope: DataScope) => scoped("my-purchases", scope),
+  activity: (scope: DataScope) => scoped("activity", scope),
+  chainView: (scope: DataScope, datasetId: string) => scoped("chain-view", scope, datasetId),
 };
