@@ -20,7 +20,7 @@ npm run build && npm run start    # production build
 ## Test
 
 ```bash
-npm run check    # tsc, eslint and vitest
+npm run check    # tsc, eslint, vitest and the guardrails scan
 npm run e2e      # headless Chrome against `next start` (run `npm run build` first)
 ```
 
@@ -33,3 +33,9 @@ Copy `.env.local.example` to `.env.local` and set `NEXT_PUBLIC_WALLETCONNECT_PRO
 ## Data layer
 
 Screens read data only through `useDataLayer()` and the hooks in `src/data/hooks.ts`. ESLint rejects imports from `@/data/stub` everywhere except `src/data/provider.tsx`.
+
+## Roles and guardrails
+
+The Seller or Buyer role is a UI view mode stored per wallet address in this browser (`opaquely:role:<lowercase address>`). It is not a security boundary: nothing secret sits behind it, and real authorization is on-chain in later phases. `src/lib/role.ts` is the only module allowed to touch browser storage.
+
+`npm run guardrails` (part of `npm run check`) fails on exact-pin drift, on `@coinbase/cdp-sdk` other than 1.52.0, on browser storage outside `role.ts`, on `sessionStorage`, `indexedDB`, network-send APIs, raw HTML injection, FHE-SDK or OCR imports (until a later phase allow-lists specific files) and on COOP/COEP headers.
