@@ -2,47 +2,65 @@
 
 import { useAccount } from "wagmi";
 import { useMyDatasets } from "@/data/hooks";
+import type { DatasetStatus } from "@/data/types";
+import { AsyncBoundary } from "@/components/AsyncBoundary";
+import { EmptyState } from "@/components/EmptyState";
+import { PageShell } from "@/components/PageShell";
+import { Skeleton } from "@/components/Skeleton";
+import { Button } from "@/components/ui/Button";
+import { Card } from "@/components/ui/Card";
+import { StatusChip, type StatusChipVariant } from "@/components/ui/StatusChip";
+import { formatDate, plural } from "@/lib/format";
+
+const STATUS: Record<DatasetStatus, { label: string; variant: StatusChipVariant }> = {
+  open: { label: "Open", variant: "neutral" },
+  sealed: { label: "Sealed", variant: "info" },
+  listed: { label: "Listed", variant: "success" },
+};
 
 export default function SellerHomePage() {
   const { address } = useAccount();
   const datasets = useMyDatasets();
 
   return (
-    <div className="mx-auto max-w-6xl px-4 pb-16 pt-8 sm:px-6">
-      <h1 className="text-2xl font-semibold leading-tight">Seller dashboard</h1>
-      <div className="mt-8">
-        {!address ? (
-          <p className="text-muted">Connect your wallet to continue.</p>
-        ) : datasets.isPending ? (
-          <div aria-busy="true">
-            <span className="sr-only">Loading datasets</span>
-            <p className="text-muted">Loading datasets</p>
-          </div>
-        ) : datasets.isError ? (
-          <div role="alert" className="rounded-xl border border-danger p-6">
-            <h2 className="text-base font-semibold">Could not load datasets</h2>
-            <p className="mt-2 text-muted">Something went wrong while reading data. Try again.</p>
-            <button
-              type="button"
-              onClick={() => void datasets.refetch()}
-              className="mt-4 h-11 rounded-lg border border-border-strong px-4 font-semibold"
-            >
-              Try again
-            </button>
-          </div>
-        ) : (
-          <ul className="flex flex-col gap-4">
-            {datasets.data.map((d) => (
-              <li key={d.id} className="rounded-xl border border-border bg-surface p-6">
-                <p className="text-base font-semibold">{d.name}</p>
-                <p className="text-sm text-muted">
-                  {d.billCount} {d.billCount === 1 ? "bill" : "bills"} · {d.status}
-                </p>
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
-    </div>
+    <PageShell title="Seller dashboard" actions={<Button href="/sell/datasets/new">Create dataset</Button>}>
+      {!address ? (
+        <p className="text-muted">Connect your wallet to continue.</p>
+      ) : (
+        <AsyncBoundary
+          query={datasets}
+          thing="datasets"
+          skeleton={
+            <div className="flex flex-col gap-4">
+              <Skeleton className="h-24 w-full" />
+              <Skeleton className="h-24 w-full" />
+              <Skeleton className="h-24 w-full" />
+            </div>
+          }
+          isEmpty={(rows) => rows.length === 0}
+          empty={
+            <EmptyState heading="No datasets yet" action={{ label: "Create dataset", href: "/sell/datasets/new" }}>
+              Create a dataset to start adding bills.
+            </EmptyState>
+          }
+        >
+          {(rows) => (
+            <ul className="flex flex-col gap-4">
+              {rows.map((d) => (
+                <Card as="li" key={d.id} className="flex flex-wrap items-center justify-between gap-4">
+                  <div className="min-w-0">
+                    <p className="text-base font-semibold wrap-break-word">{d.name}</p>
+                    <p className="text-sm text-muted">
+                      {plural(d.billCount, "bill")} · {formatDate(d.createdAt)}
+                    </p>
+                  </div>
+                  <StatusChip variant={STATUS[d.status].variant}>{STATUS[d.status].label}</StatusChip>
+                </Card>
+              ))}
+            </ul>
+          )}
+        </AsyncBoundary>
+      )}
+    </PageShell>
   );
 }
