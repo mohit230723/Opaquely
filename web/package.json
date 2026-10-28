@@ -9,8 +9,9 @@
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "check": "npm run typecheck && npm run lint && npm run test",
-    "e2e": "node e2e/run-all.mjs"
+    "check": "npm run typecheck && npm run lint && npm run test && npm run guardrails",
+    "e2e": "node e2e/run-all.mjs",
+    "guardrails": "node scripts/guardrails.mjs all"
   },
   "overrides": {
     "@coinbase/cdp-sdk": "1.52.0"
