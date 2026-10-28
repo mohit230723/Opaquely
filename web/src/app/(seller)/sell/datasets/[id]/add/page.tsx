@@ -9,6 +9,7 @@ import { Skeleton } from "@/components/Skeleton";
 import { TxStatus } from "@/components/TxStatus";
 import { LockIcon } from "@/components/icons";
 import { BillReviewForm } from "@/components/seller/BillReviewForm";
+import { Dropzone } from "@/components/seller/Dropzone";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { useAddBill, useDataset } from "@/data/hooks";
@@ -23,7 +24,7 @@ export default function AddBillPage() {
 
   return (
     <PageShell title="Add a bill">
-      <AsyncBoundary query={dataset} thing="dataset" skeleton={<Skeleton className="h-96 w-full max-w-xl" />}>
+      <AsyncBoundary query={dataset} thing="dataset" skeleton={<Skeleton className="h-96 w-full" />}>
         {(data) => {
           if (data === null) {
             return (
@@ -76,8 +77,9 @@ function AddBillScreen({ datasetId, billCount }: { datasetId: string; billCount:
           <p className="mt-1 text-muted">Reading the bill automatically arrives in a later phase. Fill in the fields from your bill.</p>
         </div>
       </div>
-      <div className="grid gap-6">
-        <Card className="max-w-xl">
+      <div className="grid items-start gap-6 lg:grid-cols-2">
+        <Dropzone key={resetKey} />
+        <Card>
           {confirmed ? (
             <div>
               <p className="text-lg font-semibold">
