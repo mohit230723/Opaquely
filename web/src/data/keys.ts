@@ -8,4 +8,5 @@ function scoped(name: string, scope: DataScope, ...ids: string[]): string[] {
 
 export const queryKeys = {
   myDatasets: (scope: DataScope) => scoped("my-datasets", scope),
+  sellerStats: (scope: DataScope) => scoped("seller-stats", scope),
 };

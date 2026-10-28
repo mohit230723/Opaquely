@@ -1,5 +1,7 @@
-import type { Dataset, Hex } from "../types";
+import type { Dataset, Hex, TxHandle } from "../types";
 import type { DataLayer } from "../data-layer";
+import { HARDHAT_CHAIN_ID } from "@/lib/constants";
+import { ReadableTxError, WRONG_NETWORK_REASON } from "@/lib/tx-errors";
 
 export type SeedMode = "demo" | "empty";
 
@@ -37,6 +39,9 @@ function updateControls(patch: Partial<ControlsSnapshot>) {
 
 const store = new Map<string, Dataset[]>();
 
+let txCounter = 0;
+let blockCounter = 1000n;
+
 function clearStore() {
   store.clear();
 }
@@ -70,6 +75,8 @@ export const stubControls = {
 /** Tests only: back to a clean store and default controls. */
 export function resetStubStore(): void {
   clearStore();
+  txCounter = 0;
+  blockCounter = 1000n;
   controls = { failNext: false, failNextRead: false, seedMode: "demo" };
   listeners.forEach((cb) => cb());
 }
@@ -146,6 +153,61 @@ async function beforeRead(address: Hex | undefined, override?: number): Promise<
   }
 }
 
+// ---- transactions ----
+
+/** Deterministic fake hash: "0x" plus 64 hex characters derived from a counter. */
+function fakeHash(n: number): Hex {
+  let h = (n * 2654435761) >>> 0;
+  let out = "";
+  while (out.length < 64) {
+    h = (Math.imul(h ^ (h >>> 15), 2246822507) + 3266489909) >>> 0;
+    out += h.toString(16).padStart(8, "0");
+  }
+  return `0x${out.slice(0, 64)}` as Hex;
+}
+
+interface StubTxOptions {
+  chainId?: number;
+  latency?: StubOptions["latency"];
+  /** Runs when the receipt arrives; the store changes only here. Returns the created id, if any. */
+  apply: () => string | undefined;
+}
+
+/**
+ * Simulates one write. Refuses a wrong chain first (NetworkGate normally blocks the UI before
+ * this; it mirrors viem ChainMismatchError). The sign delay is the "awaiting signature" phase,
+ * the confirm delay is "pending". The store changes only once the receipt resolves.
+ */
+async function stubTx(opts: StubTxOptions): Promise<TxHandle> {
+  if (opts.chainId !== undefined && opts.chainId !== HARDHAT_CHAIN_ID) {
+    throw new ReadableTxError(WRONG_NETWORK_REASON, "wrong_network");
+  }
+  await wait(opts.latency?.signMs ?? 1200);
+  if (controls.failNext) {
+    updateControls({ failNext: false });
+    throw new ReadableTxError("Simulated failure: execution reverted.", "reverted");
+  }
+  const hash = fakeHash(++txCounter);
+  return {
+    hash,
+    async wait() {
+      await wait(opts.latency?.confirmMs ?? 1500);
+      const createdId = opts.apply();
+      return { status: "success", blockNumber: blockCounter++, ...(createdId ? { createdId } : {}) };
+    },
+  };
+}
+
+const NAME_ERROR = "Give your dataset a name (1 to 60 characters).";
+
+function slugify(name: string): string {
+  const slug = name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  return slug || "dataset";
+}
+
 // ---- the layer ----
 
 export function createStubDataLayer(opts: StubOptions): DataLayer {
@@ -155,6 +217,32 @@ export function createStubDataLayer(opts: StubOptions): DataLayer {
       await beforeRead(address, latency?.readMs);
       if (!address) return [];
       return datasetsFor(address).map((d) => ({ ...d, categories: [...d.categories] }));
+    },
+
+    async createDataset({ name }) {
+      const trimmed = name.trim();
+      if (trimmed.length < 1 || trimmed.length > 60) throw new ReadableTxError(NAME_ERROR);
+      if (!address) throw new ReadableTxError("Connect your wallet to continue.");
+      return stubTx({
+        chainId: opts.chainId,
+        latency,
+        apply: () => {
+          const rows = datasetsFor(address);
+          const base = slugify(trimmed);
+          let id = base;
+          for (let n = 2; rows.some((d) => d.id === id); n++) id = `${base}-${n}`;
+          rows.push({
+            id,
+            name: trimmed,
+            owner: address.toLowerCase() as Hex,
+            billCount: 0,
+            status: "open",
+            categories: [],
+            createdAt: Date.now(),
+          });
+          return id;
+        },
+      });
     },
   };
 }
