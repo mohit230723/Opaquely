@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { getStoredRole, roleStorageKey, setRole, subscribeRole } from "./role";
+import { getStoredRole, isRoleSwitching, roleStorageKey, setRole, setRoleSwitching, subscribeRole } from "./role";
 
 function installStorage() {
   const data = new Map<string, string>();
@@ -66,5 +66,15 @@ describe("role store", () => {
       },
     });
     expect(getStoredRole("0x1")).toBeNull();
+  });
+});
+
+describe("role switching flag", () => {
+  it("is off by default and can be raised and lowered", () => {
+    expect(isRoleSwitching()).toBe(false);
+    setRoleSwitching(true);
+    expect(isRoleSwitching()).toBe(true);
+    setRoleSwitching(false);
+    expect(isRoleSwitching()).toBe(false);
   });
 });

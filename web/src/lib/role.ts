@@ -54,3 +54,16 @@ export function useRole(address?: string): Role | null | undefined {
     () => undefined,
   );
 }
+
+// A deliberate role switch (the header RoleSwitcher) stores the new role and then navigates. For
+// that moment the old area's guard sees a role it does not accept and would send the user to /role,
+// racing the navigation. The switcher raises this flag so the guard stands down until it lands.
+let roleSwitching = false;
+
+export function setRoleSwitching(value: boolean): void {
+  roleSwitching = value;
+}
+
+export function isRoleSwitching(): boolean {
+  return roleSwitching;
+}

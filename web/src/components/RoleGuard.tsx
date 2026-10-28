@@ -4,7 +4,7 @@ import { useEffect, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { useAccount } from "wagmi";
 import { guardDecision, type GuardNeed } from "@/lib/guard";
-import { useRole } from "@/lib/role";
+import { isRoleSwitching, useRole } from "@/lib/role";
 import { useWalletReady } from "@/lib/wallet-ready";
 
 /** Page-shaped loading block shown while the wallet or the role is still being resolved. */
@@ -34,6 +34,7 @@ export function RoleGuard({ need, children }: { need: GuardNeed; children: React
   const decision = guardDecision({ walletReady, status, role, need });
 
   useEffect(() => {
+    if (isRoleSwitching()) return; // the header RoleSwitcher is navigating to the other area
     if (decision === "to-home") router.replace("/");
     else if (decision === "to-role") router.replace("/role");
   }, [decision, router]);

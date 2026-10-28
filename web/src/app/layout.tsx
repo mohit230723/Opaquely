@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { GeistSans } from "geist/font/sans";
 import { GeistMono } from "geist/font/mono";
 import { Providers } from "./providers";
+import { AppFooter } from "@/components/AppFooter";
 import { AppHeader } from "@/components/AppHeader";
 import { NetworkGate } from "@/components/NetworkGate";
 import "./globals.css";
@@ -29,6 +30,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
               {children}
             </main>
           </NetworkGate>
+          <AppFooter />
         </Providers>
       </body>
     </html>
