@@ -33,4 +33,33 @@ export default async function smoke({ baseUrl, accounts, assert, waitForWallet, 
   const buyer = await newPage({ account: accounts.seller, roles: { [accounts.seller]: "buyer" } });
   await buyer.goto(baseUrl + "/sell");
   await buyer.waitForURL((u) => u.pathname === "/role", { timeout: 15_000 });
+
+  // WALL-03: with no stored role, /sell lands on the chooser; the choice persists and can be changed.
+  const fresh = await newPage({ account: accounts.seller });
+  await fresh.goto(baseUrl + "/sell");
+  await fresh.waitForURL((u) => u.pathname === "/role", { timeout: 15_000 });
+  await fresh.getByRole("heading", { name: "Choose your role" }).waitFor({ state: "visible", timeout: 25_000 });
+  await fresh.getByRole("radiogroup").waitFor({ state: "visible", timeout: 25_000 });
+  await fresh.getByRole("button", { name: "Continue as Seller" }).click();
+  await fresh.waitForURL((u) => u.pathname === "/sell", { timeout: 15_000 });
+  await fresh.getByText("Groceries Q3").waitFor({ state: "visible", timeout: 25_000 });
+  const stored = await fresh.evaluate((k) => localStorage.getItem(k), SELLER_KEY);
+  assert(stored === "seller", `expected stored role "seller", got ${stored}`);
+
+  // Choosing again changes the role; arrow keys move the radio selection.
+  // Same page, no pre-seeded role: nothing re-writes the stored value on navigation.
+  const again = fresh;
+  await again.goto(baseUrl + "/role");
+  await again.getByRole("heading", { name: "Choose your role" }).waitFor({ state: "visible", timeout: 25_000 });
+  await again.getByText("Current role").waitFor({ state: "visible", timeout: 10_000 });
+  const sellerRadio = again.getByRole("radio", { name: /Seller/ });
+  assert((await sellerRadio.getAttribute("aria-checked")) === "true", "expected Seller radio checked");
+  await sellerRadio.focus();
+  await again.keyboard.press("ArrowRight");
+  const buyerRadio = again.getByRole("radio", { name: /Buyer/ });
+  assert((await buyerRadio.getAttribute("aria-checked")) === "true", "expected Buyer radio checked after ArrowRight");
+  await again.getByRole("button", { name: "Continue as Buyer" }).click();
+  await again.waitForURL((u) => u.pathname === "/buy", { timeout: 15_000 });
+  const changed = await again.evaluate((k) => localStorage.getItem(k), SELLER_KEY);
+  assert(changed === "buyer", `expected stored role "buyer", got ${changed}`);
 }
