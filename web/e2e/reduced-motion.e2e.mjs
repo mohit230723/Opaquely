@@ -1,4 +1,4 @@
-// Reduced motion: the hero draws one static frame; without it the hero animates.
+// Reduced motion: the hero draws one static frame; without it the hero animates. The menu opens without tweens.
 
 export default async function reducedMotion({ baseUrl, assert, newPage }) {
   const still = await newPage({ account: null, reducedMotion: true, viewport: { width: 1280, height: 900 } });
@@ -21,4 +21,17 @@ export default async function reducedMotion({ baseUrl, assert, newPage }) {
   await moving.waitForTimeout(1_500);
   const d = await movingCanvas.screenshot();
   assert(!c.equals(d), "without reduced motion the hero must animate (two screenshots 1.5 s apart are identical)");
+
+  // Reduced motion: the menu opens instantly (no GSAP timeline) and Escape closes it.
+  const menu = await newPage({ account: null, reducedMotion: true, viewport: { width: 1280, height: 900 } });
+  await menu.goto(baseUrl + "/");
+  await menu.getByRole("button", { name: "Open menu" }).waitFor({ state: "visible", timeout: 25_000 });
+  await menu.getByRole("button", { name: "Open menu" }).click();
+  await menu
+    .locator("#staggered-menu-panel")
+    .getByRole("link", { name: "Upload", exact: true })
+    .waitFor({ state: "visible", timeout: 500 });
+  await menu.getByRole("button", { name: "Close menu" }).waitFor({ state: "visible", timeout: 500 });
+  await menu.keyboard.press("Escape");
+  await menu.getByRole("button", { name: "Open menu" }).waitFor({ state: "visible", timeout: 5_000 });
 }

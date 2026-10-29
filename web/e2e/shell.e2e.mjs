@@ -62,7 +62,7 @@ export default async function shell({ baseUrl, accounts, assert, waitForWallet, 
       (await nav.getByRole("link", { name: "Upload" }).getAttribute("aria-current")) === null,
       "Upload must not be active on /account",
     );
-    await page.getByText("Simulated data and transactions. Nothing is sent to a chain yet.").waitFor({ state: "visible", ...T });
+    await page.locator("footer").getByText("Simulated data and transactions. Nothing is sent to a chain yet.").waitFor({ state: "visible", ...T });
 
     // Fail the next transaction: one failure, then Try again confirms.
     await page.getByLabel("Fail the next transaction (demo)").check();
@@ -106,13 +106,35 @@ export default async function shell({ baseUrl, accounts, assert, waitForWallet, 
     assert(Math.abs(box.y + box.height - 800) <= 1, `footer bottom should be 800 on a short page, got ${box.y + box.height}`);
   }
 
-  // ---- 360px: nothing scrolls sideways and the header logo link is visible ----
+  // ---- 360px: the menu is the navigation, nothing scrolls sideways ----
   {
-    const page = await newPage({ account: accounts.seller, viewport: { width: 360, height: 740 } });
+    const page = await newPage({ account: accounts.seller, viewport: { width: 360, height: 800 } });
     await page.goto(baseUrl + "/my-datasets");
     await page.getByText("Groceries Q3").waitFor({ state: "visible", ...LONG });
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth);
     assert(overflow <= 360, `page must not scroll horizontally at 360px (scrollWidth ${overflow}px)`);
+    assert(
+      !(await page.locator("header").getByRole("navigation", { name: "Primary" }).isVisible()),
+      "the Primary nav must not be visible at 360px",
+    );
     await page.locator("header").getByRole("link", { name: "Opaquely" }).waitFor({ state: "visible", ...T });
+    const toggle = page.getByRole("button", { name: "Open menu" });
+    await toggle.waitFor({ state: "visible", ...T });
+    await toggle.click();
+    const panel = page.locator("#staggered-menu-panel");
+    await panel.getByRole("link", { name: "My Account", exact: true }).waitFor({ state: "visible", ...T });
+    await panel.getByText("Simulated data and transactions. Nothing is sent to a chain yet.").waitFor({ state: "visible", ...T });
+    await panel.getByRole("link", { name: "My Account", exact: true }).click();
+    await page.waitForURL((u) => u.pathname === "/account", { timeout: 15_000 });
+  }
+
+  // ---- 768px: the Primary nav is back and nothing scrolls sideways ----
+  {
+    const page = await newPage({ account: accounts.seller, viewport: { width: 768, height: 900 } });
+    await page.goto(baseUrl + "/my-datasets");
+    await page.getByText("Groceries Q3").waitFor({ state: "visible", ...LONG });
+    await page.locator("header").getByRole("navigation", { name: "Primary" }).waitFor({ state: "visible", ...T });
+    const overflow = await page.evaluate(() => document.documentElement.scrollWidth);
+    assert(overflow <= 768, `page must not scroll horizontally at 768px (scrollWidth ${overflow}px)`);
   }
 }

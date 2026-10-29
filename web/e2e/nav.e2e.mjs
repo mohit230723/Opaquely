@@ -67,6 +67,19 @@ export default async function nav({ baseUrl, accounts, assert, waitForWallet, ne
 
   // The StaggeredMenu on the right lists every section, moves client-side and closes on link click and Escape.
   await menuChecks({ page, baseUrl, assert, waitForWallet, accounts });
+
+  // At 360px the menu alone moves Upload -> Marketplace, client-side.
+  const phone = await newPage({ account: accounts.buyer, viewport: { width: 360, height: 800 } });
+  await phone.goto(baseUrl + "/upload");
+  await phone.getByRole("heading", { level: 1, name: "Upload" }).waitFor({ state: "visible", timeout: 25_000 });
+  await phone.getByRole("button", { name: "Open menu" }).waitFor({ state: "visible", timeout: 25_000 });
+  await phone.evaluate(() => {
+    window.__phoneMarker = 1;
+  });
+  await phone.getByRole("button", { name: "Open menu" }).click();
+  await phone.locator("#staggered-menu-panel").getByRole("link", { name: "Marketplace", exact: true }).click();
+  await phone.waitForURL((u) => u.pathname === "/marketplace", { timeout: 15_000 });
+  assert((await phone.evaluate(() => window.__phoneMarker)) === 1, "phone menu navigation must be client-side");
 }
 
 async function menuChecks({ page, baseUrl, assert, waitForWallet, accounts }) {
