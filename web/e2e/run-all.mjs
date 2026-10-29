@@ -1,8 +1,8 @@
 // Headless Chrome e2e runner: starts `next start`, injects a test wallet, runs e2e/*.e2e.mjs.
 // Usage: node e2e/run-all.mjs [--port 3100] [script-name ...]
-// fhe-spike and seller-live need `hardhat node` on 127.0.0.1:8545 (seller-live also needs the contracts
-// deployed). Each runs when you name it (and then fails if no node answers) or in an unfiltered run when a
-// node is up; an unfiltered run with no node skips both.
+// fhe-spike, seller-live and buyer-live need `hardhat node` on 127.0.0.1:8545 (seller-live and buyer-live also
+// need the contracts deployed). Each runs when you name it (and then fails if no node answers) or in an
+// unfiltered run when a node is up; an unfiltered run with no node skips all three.
 import { spawn } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
@@ -14,7 +14,7 @@ const webDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const e2eDir = path.join(webDir, "e2e");
 
 // Scripts that need `hardhat node` on 127.0.0.1:8545. An unfiltered run skips them when no node answers.
-const NEEDS_NODE = new Set(["fhe-spike", "seller-live"]);
+const NEEDS_NODE = new Set(["fhe-spike", "seller-live", "buyer-live"]);
 
 // ---- args ----
 const argv = process.argv.slice(2);
@@ -37,6 +37,8 @@ if (!fs.existsSync(path.join(webDir, ".next", "BUILD_ID"))) {
 const accounts = {
   seller: "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
   buyer: "0x70997970C51812dc3A010C7d01b50e0d17dc79C8",
+  // Hardhat #2: a buyer that never buys (Phase 5), used to prove a stranger's wallet gets no access.
+  outsider: "0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC",
 };
 const baseUrl = `http://127.0.0.1:${port}`;
 
