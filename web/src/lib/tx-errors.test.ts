@@ -132,8 +132,6 @@ describe("REVERT_REASONS covers the Marketplace ABI", () => {
     "NotSealed",
     "OnlyMarketplace",
     "ReentrancyGuardReentrantCall",
-    "SenderNotAllowedToUseHandle",
-    "ZamaProtocolUnsupported",
   ];
   const abi = getDeployment(31337)!.market.abi as readonly { type: string; name?: string }[];
   const errorNames = abi.filter((x) => x.type === "error").map((x) => x.name as string);
@@ -141,6 +139,13 @@ describe("REVERT_REASONS covers the Marketplace ABI", () => {
   it("gives every user-reachable error fixed copy", () => {
     const missing = errorNames.filter((n) => !INTERNAL.includes(n) && !(n in REVERT_REASONS));
     expect(missing, `Marketplace errors without a REVERT_REASONS entry: ${missing.join(", ")}`).toEqual([]);
+  });
+
+  it("words the two FHE library errors (IN-02)", () => {
+    expect(REVERT_REASONS.SenderNotAllowedToUseHandle).toBe("Encryption proof was rejected. Try adding the bill again.");
+    expect(REVERT_REASONS.ZamaProtocolUnsupported).toContain("does not support encrypted data");
+    const e = named("ContractFunctionExecutionError", {}, named("ContractFunctionRevertedError", { data: { errorName: "SenderNotAllowedToUseHandle" } }));
+    expect(toReadableError(e)).toEqual({ reason: REVERT_REASONS.SenderNotAllowedToUseHandle, code: "reverted" });
   });
 
   it("lists internal errors that really exist in the ABI", () => {

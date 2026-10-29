@@ -27,6 +27,9 @@ export const REVERT_REASONS: Record<string, string> = {
   DescriptionTooLong: "Keep the description to 300 characters or fewer.",
   ZeroPrice: "Enter a price greater than 0 ETH.",
   InvalidCategoryMask: "Choose valid categories.",
+  // FHE library errors that ride in the same ABI: a bad input proof, or a chain without the FHE contracts.
+  SenderNotAllowedToUseHandle: "Encryption proof was rejected. Try adding the bill again.",
+  ZamaProtocolUnsupported: "This network does not support encrypted data. Switch networks and try again.",
   // Buyer side (Phase 5 may adjust the copy).
   ListingNotFound: "Listing not found.",
   WrongPayment: "The payment must equal the listing price exactly.",
