@@ -14,6 +14,11 @@ export default defineConfig([
     "public/**",
     // Vendored hero (plan 01-05); the file is ignored now so no later plan edits this config for it.
     "src/components/GradientASCII.jsx",
+    // Vendored user-supplied React Bits components (plans 07-02 and 07-03), same precedent: their .d.ts files are
+    // type-checked, and the guardrails walker and the 07-03 pattern re-scan still cover the .jsx sources.
+    "src/components/ui/GooeyNav.jsx",
+    "src/components/ui/StaggeredMenu.jsx",
+    "src/components/ui/SpecularButton.jsx",
   ]),
   {
     files: ["src/**/*.{ts,tsx}"],

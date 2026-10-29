@@ -1,4 +1,6 @@
-// Nav (Phase 7): the role-free header Primary nav, client-side transitions, old-route redirects, no role UI.
+// Nav (Phase 7): the role-free header Primary nav (GooeyNav), logo and favicon, client-side transitions, old-route
+// redirects, no role UI. GooeyNav renders each label twice (the second copy aria-hidden), so nav labels are always
+// found by role and name, never by text.
 
 export default async function nav({ baseUrl, accounts, assert, waitForWallet, newPage }) {
   const page = await newPage({ account: accounts.buyer });
@@ -6,6 +8,9 @@ export default async function nav({ baseUrl, accounts, assert, waitForWallet, ne
   await waitForWallet(page, accounts.buyer);
 
   const primary = page.locator("header").getByRole("navigation", { name: "Primary" });
+  await page.locator('header img[alt="Opaquely"]').waitFor({ state: "visible", timeout: 25_000 });
+  const icon = await page.locator('link[rel="icon"]').first().getAttribute("href");
+  assert(icon && icon.includes("icon"), `expected an icon link, got ${icon}`);
   const marketplace = primary.getByRole("link", { name: "Marketplace" });
   await marketplace.waitFor({ state: "visible", timeout: 25_000 });
 

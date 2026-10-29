@@ -1,21 +1,36 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { NetworkBadge } from "@/components/NetworkBadge";
 import { SiteNav } from "@/components/nav/SiteNav";
+import { BRAND, WORDMARK_RATIO } from "@/lib/brand";
 
-// No backdrop-blur, transform, filter or overflow-hidden here: the fixed menu overlay and the nav
-// canvas (plan 07-02) must position against the viewport, not the header.
+const WORDMARK_HEIGHT = 36;
+
+// No backdrop-blur, transform, filter, contain or overflow-hidden here: the fixed menu overlay and the
+// GooeyNav canvas (which reaches 72px past the nav) must position against the viewport, not the header.
 export function AppHeader() {
   return (
-    <header className="sticky top-0 z-40 flex min-h-16 flex-wrap items-center gap-x-4 border-b border-border bg-surface px-4 sm:px-6 md:flex-nowrap">
-      <Link href="/" className="flex h-16 items-center text-base font-semibold text-text">
-        Opaquely
+    <header className="sticky top-0 z-40 flex min-h-16 items-center gap-x-4 border-b border-border bg-surface pl-4 pr-[120px] sm:pl-6">
+      <Link href="/" aria-label="Opaquely" className="flex h-16 shrink-0 items-center">
+        <Image
+          src={BRAND.wordmark}
+          alt="Opaquely"
+          unoptimized
+          priority
+          width={Math.round(WORDMARK_HEIGHT * WORDMARK_RATIO)}
+          height={WORDMARK_HEIGHT}
+          className="hidden h-9 w-auto sm:block"
+        />
+        <Image src={BRAND.icon} alt="" unoptimized priority width={40} height={40} className="h-10 w-10 sm:hidden" />
       </Link>
       <SiteNav />
-      <div className="ml-auto flex min-h-16 min-w-0 flex-wrap items-center justify-end gap-x-3 gap-y-2 py-2">
-        <NetworkBadge />
+      <div className="ml-auto flex min-h-16 min-w-0 items-center justify-end gap-x-3 py-2">
+        <span className="hidden sm:inline-flex">
+          <NetworkBadge />
+        </span>
         <ConnectButton showBalance={false} accountStatus={{ smallScreen: "avatar", largeScreen: "address" }} />
       </div>
     </header>
