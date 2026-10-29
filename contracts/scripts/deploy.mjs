@@ -20,6 +20,14 @@ const outIdx = process.argv.indexOf("--out");
 if (outIdx > -1 && outIdx === process.argv.length - 1) throw new Error("--out needs a directory");
 const outDir = path.resolve(outIdx > -1 ? process.argv[outIdx + 1] : path.join(root, "..", "web", "src", "contracts"));
 const rpcUrl = process.env.RPC_URL ?? "http://127.0.0.1:8545";
+// Only the origin is ever printed: a provider URL can carry its API key in the path or query.
+const safeRpc = (() => {
+  try {
+    return new URL(rpcUrl).origin;
+  } catch {
+    return "RPC_URL";
+  }
+})();
 const threshold = BigInt(process.env.ANOMALY_THRESHOLD_CENTS ?? "500000");
 
 function artifact(name) {
@@ -30,7 +38,7 @@ function artifact(name) {
 
 const publicClient = createPublicClient({ transport: http(rpcUrl) });
 const chainId = await publicClient.getChainId().catch(() => {
-  throw new Error(`No node answers at ${rpcUrl}. Start one with: node scripts/dev-node.mjs start`);
+  throw new Error(`No node answers at ${safeRpc}. Start one with: node scripts/dev-node.mjs start`);
 });
 
 /** Trim, add a missing 0x, and accept only 32 hex bytes. The value is never put into an error message. */
@@ -45,7 +53,7 @@ let account;
 if (process.env.DEPLOYER_PRIVATE_KEY) account = privateKeyToAccount(normalisePrivateKey(process.env.DEPLOYER_PRIVATE_KEY));
 else {
   const accounts = await publicClient.request({ method: "eth_accounts" });
-  if (!accounts || accounts.length === 0) throw new Error("No unlocked account at " + rpcUrl + "; set DEPLOYER_PRIVATE_KEY");
+  if (!accounts || accounts.length === 0) throw new Error("No unlocked account at " + safeRpc + "; set DEPLOYER_PRIVATE_KEY");
   account = getAddress(accounts[0]);
 }
 const wallet = createWalletClient({ account, transport: http(rpcUrl) });

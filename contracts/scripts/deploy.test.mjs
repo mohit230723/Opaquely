@@ -51,12 +51,12 @@ after(async () => {
   for (const dir of outDirs) fs.rmSync(dir, { recursive: true, force: true });
 });
 
-function runDeploy(key) {
+function runDeploy(key, urlSuffix = "") {
   fs.mkdirSync(scratchRoot, { recursive: true });
   const outDir = fs.mkdtempSync(path.join(scratchRoot, "deploy-test-"));
   outDirs.push(outDir);
   methods = [];
-  const env = { ...process.env, RPC_URL: rpcUrl };
+  const env = { ...process.env, RPC_URL: rpcUrl + urlSuffix };
   if (key === undefined) delete env.DEPLOYER_PRIVATE_KEY;
   else env.DEPLOYER_PRIVATE_KEY = key;
   return new Promise((resolve) => {
@@ -109,4 +109,12 @@ test("a funded key prints the deploy target, then fails at the fake server witho
   );
   assert.ok(!r.output.includes(PUBLIC_KEY_HEX), "the key hex must not be printed");
   assert.ok(!fs.existsSync(path.join(r.outDir, "deployments.json")));
+});
+
+test("the RPC URL path and query (a provider API key) are never printed, only the origin", async () => {
+  const r = await runDeploy(undefined, "/v3/SECRETAPIKEY123?token=SECRETQUERY456");
+  assert.equal(r.code, 1);
+  assert.ok(r.output.includes("No unlocked account at " + rpcUrl), r.output);
+  assert.ok(!r.output.includes("SECRETAPIKEY123"), "the URL path must not be printed");
+  assert.ok(!r.output.includes("SECRETQUERY456"), "the URL query must not be printed");
 });
