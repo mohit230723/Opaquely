@@ -171,6 +171,27 @@ describe("stub demo seed", () => {
     }
   });
 
+  it("never stamps seeded or newly created events in the future", async () => {
+    const layer = createStubDataLayer({ address: SELLER, latency: FAST_TX });
+    const before = Date.now();
+    const seededAts = [
+      ...(await layer.listActivity()).map((e) => e.at),
+      ...(await layer.listListings()).map((l) => l.listedAt),
+      ...(await layer.listMyDatasets()).map((d) => d.createdAt),
+      ...(await layer.listMyPurchases()).map((p) => p.purchasedAt),
+    ];
+    for (const at of seededAts) expect(at).toBeLessThan(before);
+
+    const handle = await layer.createDataset({ name: "Fresh dataset" });
+    const receipt = await handle.wait();
+    const created = (await layer.listMyDatasets()).find((d) => d.id === receipt.createdId);
+    expect(created).toBeDefined();
+    const createdAt = created?.createdAt ?? 0;
+    expect(createdAt).toBeGreaterThanOrEqual(before);
+    expect(createdAt).toBeLessThanOrEqual(Date.now() + 1000);
+    for (const at of seededAts) expect(createdAt).toBeGreaterThan(at);
+  });
+
   it("has exactly one own listing and one already-bought listing", async () => {
     const layer = seller();
     const rows = await layer.listListings();

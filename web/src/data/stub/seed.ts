@@ -5,7 +5,9 @@ import type { ActivityEvent, Dataset, Hex, Listing, Purchase } from "../types";
 // prices: later plans assert filter results that depend on these exact values.
 
 const DAY_MS = 24 * 60 * 60 * 1000;
-export const SEED_BASE = Date.UTC(2026, 9, 20, 9, 0, 0); // 20 Oct 2026
+// Well before any demo day (the demo is 30 Oct 2026), so no seeded or newly written event is ever
+// stamped in the future and the timeline never says "in N hours".
+export const SEED_BASE = Date.UTC(2026, 8, 1, 9, 0, 0); // 1 Sep 2026
 /** After every seeded timestamp, so anything written while the demo runs sorts first. */
 export const SEED_END = SEED_BASE + 10 * DAY_MS;
 
