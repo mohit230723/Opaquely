@@ -14,7 +14,15 @@ export interface LogsClient {
 const DEFAULT_WINDOW = 2000n;
 const MIN_WINDOW = 10n;
 const MAX_WINDOW = 50_000n;
-const RANGE_ERROR = /range|limit|exceed|too many|query returned more/i;
+// The provider says the window is too big: shrink it. Narrow on purpose, so a throttle message never matches.
+const RANGE_ERROR =
+  /block range|range (is )?too|exceed.*(range|block)|query returned more|max(imum)? (results|range)|response size exceeded|limited to .*range/i;
+// The provider says slow down (HTTP 429): wait and retry the same window. Shrinking the window would only
+// send more requests to a provider that is already pushing back.
+const THROTTLED = /\b429\b|rate[ -]?limit|too many requests|throttl/i;
+const THROTTLE_BACKOFF_MS = 500;
+const THROTTLE_BACKOFF_MAX_MS = 4000;
+const MAX_THROTTLE_RETRIES = 3;
 
 /** Inclusive windows covering from..to in steps of size. Empty when from is past to. */
 export function blockRanges(from: bigint, to: bigint, size: bigint): Array<[bigint, bigint]> {
@@ -39,26 +47,41 @@ export function logChunkBlocks(): bigint {
 /**
  * client.getContractEvents for a chain. On the local chain it is that one call with the same params. Elsewhere
  * it walks params.fromBlock..head in windows, halves the window (floor 10 blocks) when the provider complains
- * about the range, rethrows any other error at once, and returns the logs in block order.
+ * about the range, backs off and retries the same window (up to 3 times) when the provider throttles, rethrows
+ * any other error at once, and returns the logs in block order.
  */
 export async function getContractEventsChunked(
   client: LogsClient,
   params: { fromBlock?: bigint } & Record<string, unknown>,
-  { chainId, size }: { chainId: number; size?: bigint },
+  {
+    chainId,
+    size,
+    sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms)),
+  }: { chainId: number; size?: bigint; sleep?: (ms: number) => Promise<void> },
 ): Promise<unknown[]> {
   if (chainId === HARDHAT_CHAIN_ID) return [...(await client.getContractEvents(params as never))];
   const head = await client.getBlockNumber();
   let window = size ?? logChunkBlocks();
   let lo = params.fromBlock ?? 0n;
   const out: unknown[] = [];
+  let backoff = THROTTLE_BACKOFF_MS;
+  let throttled = 0;
   while (lo <= head) {
     const hi = lo + window - 1n > head ? head : lo + window - 1n;
     try {
       const logs = await client.getContractEvents({ ...params, fromBlock: lo, toBlock: hi } as never);
       out.push(...logs);
       lo = hi + 1n;
+      throttled = 0;
+      backoff = THROTTLE_BACKOFF_MS;
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
+      if (THROTTLED.test(message)) {
+        if (++throttled > MAX_THROTTLE_RETRIES) throw err;
+        await sleep(backoff);
+        backoff = Math.min(backoff * 2, THROTTLE_BACKOFF_MAX_MS);
+        continue;
+      }
       if (!RANGE_ERROR.test(message) || window <= MIN_WINDOW) throw err;
       window = window / 2n < MIN_WINDOW ? MIN_WINDOW : window / 2n;
     }

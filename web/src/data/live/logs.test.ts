@@ -92,6 +92,41 @@ describe("getContractEventsChunked", () => {
     expect(out).toEqual(["0-999", "1000-1999"]);
   });
 
+  it("backs off and retries the same window on a rate limit, without halving it", async () => {
+    let failures = 2;
+    const { client, calls } = fakeClient(1999n, (p) =>
+      failures-- > 0 ? new Error("HTTP request failed. Status: 429 Too Many Requests") : [`${p.fromBlock}-${p.toBlock}`],
+    );
+    const sleep = vi.fn(async (_ms: number) => {});
+    const out = await getContractEventsChunked(client, { fromBlock: 0n }, { chainId: SEPOLIA, size: 2000n, sleep });
+    expect(calls).toEqual([
+      { fromBlock: 0n, toBlock: 1999n },
+      { fromBlock: 0n, toBlock: 1999n },
+      { fromBlock: 0n, toBlock: 1999n },
+    ]);
+    expect(sleep.mock.calls.map((c) => c[0])).toEqual([500, 1000]);
+    expect(out).toEqual(["0-1999"]);
+  });
+
+  it("gives up after three rate-limit retries and rethrows", async () => {
+    const { client, calls } = fakeClient(5000n, () => new Error("rate limit exceeded"));
+    const sleep = vi.fn(async (_ms: number) => {});
+    await expect(
+      getContractEventsChunked(client, { fromBlock: 0n }, { chainId: SEPOLIA, size: 2000n, sleep }),
+    ).rejects.toThrow("rate limit exceeded");
+    expect(calls).toHaveLength(4);
+    expect(sleep).toHaveBeenCalledTimes(3);
+  });
+
+  it("does not treat a rate limit message as a range error even when it mentions a limit", async () => {
+    const { client, calls } = fakeClient(1999n, () => new Error("too many requests: request limit exceeded"));
+    const sleep = vi.fn(async (_ms: number) => {});
+    await expect(
+      getContractEventsChunked(client, { fromBlock: 0n }, { chainId: SEPOLIA, size: 2000n, sleep }),
+    ).rejects.toThrow("too many requests");
+    expect(new Set(calls.map((c) => c.toBlock))).toEqual(new Set([1999n]));
+  });
+
   it("rethrows a non-range error at once", async () => {
     const { client, calls } = fakeClient(5000n, () => new Error("execution reverted"));
     await expect(
