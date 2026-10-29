@@ -11,7 +11,7 @@ import { Card } from "@/components/ui/Card";
 import { useListing } from "@/data/hooks";
 import type { Listing } from "@/data/types";
 import { categoryLabel } from "@/lib/categories";
-import { BUYER_GETS, BUYER_NOT_GETS, BUYER_PROMISE } from "@/lib/copy";
+import { BUYER_GETS, BUYER_NOT_GETS, BUYER_PROMISE, CATEGORIES_NOT_DECLARED, CATEGORIES_SELLER_DECLARED } from "@/lib/copy";
 import { plural, shortAddress } from "@/lib/format";
 
 function DetailSkeleton() {
@@ -70,16 +70,24 @@ function ListingDetail({ listing }: { listing: Listing }) {
             </ul>
           </Card>
 
-          <div className="flex flex-wrap items-center gap-2">
-            {listing.categories.map((c) => (
-              <span
-                key={c}
-                className="inline-flex h-8 items-center rounded-full border border-border bg-surface-raised px-3 text-sm text-[#a5d8ff]"
-              >
-                {categoryLabel(c)}
-              </span>
-            ))}
-            <span className="text-sm text-muted">{plural(listing.recordCount, "bill")}</span>
+          <div className="flex flex-col gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              {listing.categories.length === 0 ? (
+                <span className="inline-flex h-8 items-center rounded-full border border-border bg-surface-raised px-3 text-sm text-muted">
+                  {CATEGORIES_NOT_DECLARED}
+                </span>
+              ) : null}
+              {listing.categories.map((c) => (
+                <span
+                  key={c}
+                  className="inline-flex h-8 items-center rounded-full border border-border bg-surface-raised px-3 text-sm text-[#a5d8ff]"
+                >
+                  {categoryLabel(c)}
+                </span>
+              ))}
+              <span className="text-sm text-muted">{plural(listing.recordCount, "bill")}</span>
+            </div>
+            <p className="text-sm text-muted">{CATEGORIES_SELLER_DECLARED}</p>
           </div>
         </div>
       </div>

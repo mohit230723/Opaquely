@@ -12,7 +12,7 @@ import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { StatusChip } from "@/components/ui/StatusChip";
 import { useBuyListing, useHasAccess } from "@/data/hooks";
 import type { Listing } from "@/data/types";
-import { DECRYPT_COMING_LABEL, DECRYPT_HELPER } from "@/lib/copy";
+import { BUYER_CAN_DECRYPT, DECRYPT_COMING_LABEL, DECRYPT_HELPER } from "@/lib/copy";
 import { formatEth, shortAddress } from "@/lib/format";
 import { isBusy } from "@/lib/tx-machine";
 
@@ -85,6 +85,7 @@ export function PurchasePanel({ listing }: { listing: Listing }) {
         <Button variant="secondary" disabled className="mt-4 w-full">
           {DECRYPT_COMING_LABEL}
         </Button>
+        <p className="mt-3 text-sm">{BUYER_CAN_DECRYPT}</p>
         <p className="mt-3 text-sm text-muted">{DECRYPT_HELPER}</p>
       </>
     );

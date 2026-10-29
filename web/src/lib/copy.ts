@@ -13,3 +13,15 @@ export const BUYER_NOT_GETS = ["Raw bills", "Vendor names", "Per-bill values"] a
 /** Decrypting insights arrives in Milestone 2, so the action stays disabled and says so. */
 export const DECRYPT_COMING_LABEL = "Decrypt insights (coming in M2)";
 export const DECRYPT_HELPER = "Decryption arrives in Milestone 2.";
+
+/**
+ * What a purchase unlocks once decryption ships in Milestone 2. It names aggregates, never numbers.
+ * The minimum bill count must not be described to buyers as a privacy guarantee (contracts/README.md, WR-01).
+ */
+export const BUYER_CAN_DECRYPT = "You can decrypt: 6 category totals, 1 anomaly count, grand total.";
+
+/** A listing whose seller-declared category mask is 0. */
+export const CATEGORIES_NOT_DECLARED = "Categories not declared by the seller";
+
+/** The mask is public and unverified (contracts/README.md "Privacy notes"). */
+export const CATEGORIES_SELLER_DECLARED = "Categories are declared by the seller and not verified.";

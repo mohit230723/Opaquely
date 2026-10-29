@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { StatusChip } from "@/components/ui/StatusChip";
 import { useMyPurchases } from "@/data/hooks";
-import { DECRYPT_COMING_LABEL, DECRYPT_HELPER } from "@/lib/copy";
+import { BUYER_CAN_DECRYPT, DECRYPT_COMING_LABEL, DECRYPT_HELPER } from "@/lib/copy";
 import { formatDate, formatEth, shortHash } from "@/lib/format";
 
 function PurchasesSkeleton() {
@@ -64,6 +64,7 @@ export default function PurchasesPage() {
                       {DECRYPT_COMING_LABEL}
                     </Button>
                   </div>
+                  <p className="text-sm text-muted">{BUYER_CAN_DECRYPT}</p>
                   <p className="text-sm text-muted">{DECRYPT_HELPER}</p>
                 </div>
               </Card>

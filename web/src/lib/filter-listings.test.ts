@@ -101,6 +101,16 @@ describe("applyListingFilter", () => {
     expect(applyListingFilter(LISTINGS, { categories: [1], query: "utilities" })).toEqual([]);
   });
 
+  it("keeps a listing with no declared categories out of any category filter but still finds it by text and price", () => {
+    const undeclared = listing("u", "Undeclared bills", E / 10n, [], SELLER_A); // 0.1
+    const all = [...LISTINGS, undeclared];
+    expect(applyListingFilter(all, { categories: [1] }).map((l) => l.id)).toEqual(["b"]);
+    expect(applyListingFilter(all, none).map((l) => l.id)).toContain("u");
+    expect(applyListingFilter(all, { ...none, query: "undeclared" }).map((l) => l.id)).toEqual(["u"]);
+    expect(applyListingFilter(all, { ...none, query: SELLER_A.toLowerCase() }).map((l) => l.id)).toEqual(["b", "u"]);
+    expect(applyListingFilter(all, { ...none, minEth: "0.2" }).map((l) => l.id)).toEqual(["e"]);
+  });
+
   it("does not mutate its input", () => {
     const copy = [...LISTINGS];
     applyListingFilter(LISTINGS, { categories: [1] });

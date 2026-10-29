@@ -7,6 +7,7 @@ import {
   WRONG_NETWORK_REASON,
   toReadableError,
 } from "./tx-errors";
+import { getDeployment } from "@/contracts";
 
 /** An error shaped like a viem error: a name, an optional code and a cause chain. */
 function named(name: string, extra: Record<string, unknown> = {}, cause?: unknown): Error {
@@ -119,5 +120,40 @@ describe("Phase 4 revert reasons", () => {
     expect(REVERT_REASONS.TooFewBills).toBe("Add at least 3 bills before listing.");
     expect(REVERT_REASONS.TooManyBills).toContain("at most 50 bills");
     expect(ENCRYPT_FAILED_REASON).toBe("Encryption failed. Is the local node running?");
+  });
+});
+
+describe("REVERT_REASONS covers the Marketplace ABI", () => {
+  // Errors a user can never trigger from the UI (setup, access to internals, library guards).
+  const INTERNAL = [
+    "InvalidMarketplace",
+    "MarketplaceAlreadySet",
+    "NotDeployer",
+    "NotSealed",
+    "OnlyMarketplace",
+    "ReentrancyGuardReentrantCall",
+    "SenderNotAllowedToUseHandle",
+    "ZamaProtocolUnsupported",
+  ];
+  const abi = getDeployment(31337)!.market.abi as readonly { type: string; name?: string }[];
+  const errorNames = abi.filter((x) => x.type === "error").map((x) => x.name as string);
+
+  it("gives every user-reachable error fixed copy", () => {
+    const missing = errorNames.filter((n) => !INTERNAL.includes(n) && !(n in REVERT_REASONS));
+    expect(missing, `Marketplace errors without a REVERT_REASONS entry: ${missing.join(", ")}`).toEqual([]);
+  });
+
+  it("lists internal errors that really exist in the ABI", () => {
+    for (const name of INTERNAL) expect(errorNames, name).toContain(name);
+  });
+
+  it("words the seven buyer reasons exactly", () => {
+    expect(REVERT_REASONS.AlreadyPurchased).toBe("You already own this dataset.");
+    expect(REVERT_REASONS.OwnListing).toBe("You cannot buy your own listing.");
+    expect(REVERT_REASONS.PriceChanged).toBe("The price changed. Reload the listing and try again.");
+    expect(REVERT_REASONS.ListingNotFound).toBe("Listing not found.");
+    expect(REVERT_REASONS.WrongPayment).toBe("The payment must equal the listing price exactly.");
+    expect(REVERT_REASONS.NothingToWithdraw).toBe("Nothing to withdraw yet.");
+    expect(REVERT_REASONS.TransferFailed).toBe("The transfer failed. Try again.");
   });
 });

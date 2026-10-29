@@ -63,7 +63,7 @@ export default async function buyerMarket({ baseUrl, accounts, assert, waitForWa
     assert(promiseText.includes("encrypted aggregate insights, not raw bills"), "promise must say encrypted aggregate insights, not raw bills");
     assert(promiseText.includes("one-time, permanent access"), "promise must say one-time, permanent access");
     await page.getByText("What you get", { exact: true }).waitFor({ state: "visible", ...T });
-    await page.getByText("6 category totals").waitFor({ state: "visible", ...T });
+    await page.getByText("6 category totals", { exact: true }).waitFor({ state: "visible", ...T });
     await page.getByText("What you do not get", { exact: true }).waitFor({ state: "visible", ...T });
     await page.getByText("Raw bills", { exact: true }).waitFor({ state: "visible", ...T });
     await page.getByText("Access granted", { exact: true }).waitFor({ state: "visible", ...LONG });

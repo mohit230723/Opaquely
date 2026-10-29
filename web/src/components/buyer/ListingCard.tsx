@@ -4,6 +4,7 @@ import Link from "next/link";
 import { StatusChip } from "@/components/ui/StatusChip";
 import type { Listing } from "@/data/types";
 import { categoryLabel } from "@/lib/categories";
+import { CATEGORIES_NOT_DECLARED } from "@/lib/copy";
 import { formatEth, plural, shortAddress } from "@/lib/format";
 
 const MAX_CHIPS = 3;
@@ -35,6 +36,9 @@ export function ListingCard({ listing, viewer }: { listing: Listing; viewer?: st
           </span>
         ))}
         {extra > 0 ? <span className={CHIP}>+{extra}</span> : null}
+        {listing.categories.length === 0 ? (
+          <span className={CHIP.replace("text-[#a5d8ff]", "text-muted")}>{CATEGORIES_NOT_DECLARED}</span>
+        ) : null}
       </span>
       <span className="mt-auto flex items-end justify-between gap-4 pt-2">
         <span className="text-sm text-muted">{plural(listing.recordCount, "bill")}</span>
