@@ -38,4 +38,26 @@ Screens read data only through `useDataLayer()` and the hooks in `src/data/hooks
 
 The Seller or Buyer role is a UI view mode stored per wallet address in this browser (`opaquely:role:<lowercase address>`). It is not a security boundary: nothing secret sits behind it, and real authorization is on-chain in later phases. `src/lib/role.ts` is the only module allowed to touch browser storage.
 
-`npm run guardrails` (part of `npm run check`) fails on exact-pin drift, on `@coinbase/cdp-sdk` other than 1.52.0, on browser storage outside `role.ts`, on `sessionStorage`, `indexedDB`, network-send APIs, raw HTML injection, FHE-SDK or OCR imports (until a later phase allow-lists specific files) and on COOP/COEP headers.
+`npm run guardrails` (part of `npm run check`) fails on exact-pin drift, on `@coinbase/cdp-sdk` other than 1.52.0, on browser storage outside `role.ts`, on `sessionStorage`, `indexedDB`, network-send APIs, raw HTML injection and on COOP/COEP headers. FHE SDK imports are allowed only in `src/lib/zama.ts` and `src/lib/fhe.ts`, and even there a static value import of `@zama-fhe/*` is rejected (`sdk-static-import`). OCR imports stay rejected until Phase 4.
+
+## FHE (Phase 2 spike)
+
+`@zama-fhe/sdk` is pinned exactly to 3.7.1. Only `src/lib/zama.ts` and `src/lib/fhe.ts` touch it, through `import type` and dynamic `import()` inside async functions, and every caller goes through `getFhevm(chainId)`. The guardrails enforce both the allow-list and the no-static-import rule, so the server render never evaluates the SDK.
+
+Local mode uses the `cleartext()` relayer with a chain override, so the local node sees inputs in cleartext. The page says "Local FHEVM mock" for that reason. It is never real FHE, and no real bill data should be entered. `getFhevm` refuses every chain other than 31337 in this phase.
+
+The dev page is `/dev/fhe?address=<FheSpike address>`. It encrypts an amount in the browser, asks the wallet to sign `submit` on the spike contract and shows the handle and tx hash.
+
+Gate commands, in order (from `web/`):
+
+```bash
+node ../contracts/scripts/dev-node.mjs start
+npm --prefix ../contracts run compile
+npm run build
+node e2e/run-all.mjs --port 3120 fhe-spike
+node ../contracts/scripts/dev-node.mjs stop
+```
+
+Without a node on 127.0.0.1:8545 the fhe-spike script prints a SKIP line and passes. The script deploys FheSpike and prints its address in the "FHE SPIKE OK contract=..." line.
+
+Open `next dev` at http://localhost:PORT, not http://127.0.0.1:PORT. Next 16 blocks its dev resources for the 127.0.0.1 origin and the page never hydrates.
