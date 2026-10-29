@@ -46,7 +46,7 @@ export function DeploymentGuard({ children }: { children: ReactNode }) {
         data-status={status}
         inert={missing}
         aria-hidden={missing || undefined}
-        className={missing ? "pointer-events-none opacity-40" : undefined}
+        className={missing ? "flex flex-1 flex-col pointer-events-none opacity-40" : "flex flex-1 flex-col"}
       >
         {children}
       </div>

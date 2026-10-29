@@ -69,7 +69,6 @@ function checkPins() {
 // cannot start importing the OCR package, and the OCR module cannot import the FHE SDK.
 const ALLOWED_SDK_FILES = ["src/lib/fhe.ts", "src/lib/zama.ts"];
 const ALLOWED_OCR_FILES = ["src/lib/ocr.ts"];
-const STORAGE_ALLOWED_FILE = "src/lib/role.ts";
 
 const SOURCE_EXT = /\.(ts|tsx|js|jsx)$/;
 const TEST_FILE = /\.test\.(ts|tsx)$/;
@@ -85,7 +84,8 @@ function walk(dir, out) {
 const LINE_RULES = [
   { rule: "sdk-import", test: (l) => /(?:from\s+|import\s*\(\s*|require\s*\(\s*|import\s+)["']@zama-fhe\//.test(l), allowedFiles: ALLOWED_SDK_FILES },
   { rule: "sdk-import", test: (l) => /(?:from\s+|import\s*\(\s*|require\s*\(\s*|import\s+)["']tesseract/.test(l), allowedFiles: ALLOWED_OCR_FILES },
-  { rule: "local-storage", test: (l) => /localStorage/.test(l), allowedFile: STORAGE_ALLOWED_FILE },
+  // Phase 7 (D-01): the role module is gone, so no app file may use localStorage.
+  { rule: "local-storage", test: (l) => /localStorage/.test(l) },
   { rule: "session-storage", test: (l) => /sessionStorage/.test(l) },
   { rule: "indexed-db", test: (l) => /indexedDB/.test(l) },
   { rule: "raw-html-injection", test: (l) => /dangerouslySetInnerHTML/.test(l) },
@@ -110,7 +110,6 @@ function checkPrivacy() {
     const lines = fs.readFileSync(file, "utf8").split(/\r?\n/);
     lines.forEach((text, i) => {
       for (const rule of LINE_RULES) {
-        if (rule.allowedFile && r === rule.allowedFile) continue;
         if (rule.allowedFiles && rule.allowedFiles.includes(r)) continue;
         if (rule.test(text)) violation(rule.rule, r, i + 1);
       }

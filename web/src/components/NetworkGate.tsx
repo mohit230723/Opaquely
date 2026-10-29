@@ -52,7 +52,7 @@ export function NetworkGate({ children }: { children: ReactNode }) {
         data-testid="gated-main"
         inert={wrong}
         aria-hidden={wrong || undefined}
-        className={wrong ? "pointer-events-none opacity-40" : undefined}
+        className={wrong ? "flex flex-1 flex-col pointer-events-none opacity-40" : "flex flex-1 flex-col"}
       >
         {children}
       </div>

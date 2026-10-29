@@ -25,15 +25,20 @@ export default function RootLayout({ children }: { children: ReactNode }) {
           Skip to content
         </a>
         <Providers>
-          <AppHeader />
-          <NetworkGate>
-            <DeploymentGuard>
-              <main id="main" tabIndex={-1}>
-                {children}
-              </main>
-            </DeploymentGuard>
-          </NetworkGate>
-          <AppFooter />
+          {/* Footer at the bottom of the flow: after the content on long pages, at the viewport bottom on short ones. */}
+          <div className="flex min-h-dvh flex-col">
+            <AppHeader />
+            <div className="flex flex-1 flex-col">
+              <NetworkGate>
+                <DeploymentGuard>
+                  <main id="main" tabIndex={-1} className="flex-1">
+                    {children}
+                  </main>
+                </DeploymentGuard>
+              </NetworkGate>
+            </div>
+            <AppFooter />
+          </div>
         </Providers>
       </body>
     </html>

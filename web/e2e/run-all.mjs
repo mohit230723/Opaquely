@@ -132,8 +132,9 @@ async function main() {
       const contexts = [];
       const pageErrors = [];
 
-      // roles: map of address -> "seller" | "buyer", written to localStorage on the app origin only.
-      async function newPage({ account = null, chainId = 31337, roles = {}, reducedMotion, viewport, rpcUrl, data = "stub" } = {}) {
+      // Phase 7 removed the role: the app stores nothing, so only wagmi's recent connector is seeded. A caller
+      // that still passes the old roles option is ignored by the destructuring below.
+      async function newPage({ account = null, chainId = 31337, reducedMotion, viewport, rpcUrl, data = "stub" } = {}) {
         const context = await browser.newContext({
           viewport: viewport ?? { width: 1280, height: 800 },
           reducedMotion: reducedMotion ? "reduce" : "no-preference",
@@ -150,14 +151,11 @@ async function main() {
           await context.addInitScript({ content: walletStubInitScript({ account, chainId, rpcUrl }) });
         }
         await context.addInitScript(
-          ({ origin, withWallet, roleEntries }) => {
+          ({ origin, withWallet }) => {
             if (location.origin !== origin) return;
             if (withWallet) localStorage.setItem("wagmi.recentConnectorId", JSON.stringify("com.opaquely.e2e"));
-            for (const [addr, role] of roleEntries) {
-              localStorage.setItem("opaquely:role:" + addr.toLowerCase(), role);
-            }
           },
-          { origin: baseUrl, withWallet: Boolean(account), roleEntries: Object.entries(roles) },
+          { origin: baseUrl, withWallet: Boolean(account) },
         );
         const page = await context.newPage();
         page.on("pageerror", (err) => pageErrors.push(err));

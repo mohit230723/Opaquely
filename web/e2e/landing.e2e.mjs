@@ -33,10 +33,13 @@ export default async function landing({ baseUrl, accounts, assert, waitForWallet
   const heroConnect = anon.locator("section").first().getByRole("button", { name: "Connect Wallet" });
   await heroConnect.waitFor({ state: "visible", timeout: 25_000 });
 
-  // LAND-02: the CTA opens the RainbowKit modal when disconnected.
-  await anon.getByRole("button", { name: "Start selling" }).click();
-  await anon.getByRole("dialog").getByText("Connect a Wallet").waitFor({ state: "visible", timeout: 15_000 });
-  await anon.keyboard.press("Escape");
+  // LAND-02: the hero CTAs are plain links to Upload and the Marketplace.
+  const hero = anon.locator("section").first();
+  assert((await hero.getByRole("link", { name: "Upload" }).getAttribute("href")) === "/upload", "hero Upload must link to /upload");
+  assert(
+    (await hero.getByRole("link", { name: "Browse marketplace" }).getAttribute("href")) === "/marketplace",
+    "hero Browse marketplace must link to /marketplace",
+  );
 
   // LAND-02: "How it works" lists the six steps with their lines.
   await anon.getByRole("heading", { name: "How it works" }).waitFor({ state: "visible", timeout: 10_000 });
@@ -46,17 +49,10 @@ export default async function landing({ baseUrl, accounts, assert, waitForWallet
   }
   assert((await anon.locator("ol > li").count()) === 6, "expected six steps in the ordered list");
 
-  // Connected seller with a stored seller role goes straight to /sell.
-  const seller = await newPage({ account: accounts.seller, roles: { [accounts.seller]: "seller" } });
-  await seller.goto(baseUrl + "/");
-  await waitForWallet(seller, accounts.seller);
-  await seller.getByRole("button", { name: "Start selling" }).click();
-  await seller.waitForURL((u) => u.pathname === "/sell", { timeout: 15_000 });
-
-  // Connected buyer account with no stored role is sent to the chooser.
+  // A connected wallet with nothing stored goes straight to the Marketplace (no role chooser).
   const buyer = await newPage({ account: accounts.buyer });
   await buyer.goto(baseUrl + "/");
   await waitForWallet(buyer, accounts.buyer);
-  await buyer.getByRole("button", { name: "Browse datasets" }).click();
-  await buyer.waitForURL((u) => u.pathname === "/role", { timeout: 15_000 });
+  await buyer.locator("section").first().getByRole("link", { name: "Browse marketplace" }).click();
+  await buyer.waitForURL((u) => u.pathname === "/marketplace", { timeout: 15_000 });
 }

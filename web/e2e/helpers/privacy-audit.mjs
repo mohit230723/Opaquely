@@ -19,8 +19,9 @@ const TOLERATED = [
   { origin: "https://pulse.walletconnect.org", methods: ["POST"] }, // RainbowKit and WalletConnect telemetry
   { origin: "https://api.web3modal.org", methods: ["GET"] }, // Reown project-config fetch
 ];
-// Keys the wallet libraries and the role picker own (same list as the Phase 4 inline audit).
-const STORAGE_KEY_OK = /^(opaquely:role:|wagmi|rk-|@appkit|base-acc-sdk|WALLETCONNECT|wc@)/i;
+// Keys the wallet libraries own (wagmi, RainbowKit, Reown AppKit, Base account SDK, WalletConnect). The app
+// itself stores nothing since Phase 7 removed the role, so any opaquely* key is a finding.
+const STORAGE_KEY_OK = /^(wagmi|rk-|@appkit|base-acc-sdk|WALLETCONNECT|wc@)/i;
 // Databases the wallet libraries own. "keyval-store" (the tesseract model cache) must never appear.
 const IDB_ALLOWED = ["WALLET_CONNECT_V2_INDEXED_DB", "base-acc-sdk"];
 // PD-14: WebSocket hosts tolerated beyond the app and RPC hosts. Empty until a real run shows one from the
