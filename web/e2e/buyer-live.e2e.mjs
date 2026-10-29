@@ -81,6 +81,8 @@ export default async function buyerLive({ baseUrl, accounts, assert, waitForWall
 
   // ---- (a) node side: two real listings, found later by a per-run tag ----
   const tag = Date.now().toString(36);
+  // Counters are asserted as deltas against reads taken right before the thing they measure, never as
+  // absolute numbers, so earlier runs on the same node (and their leftovers) do not matter.
   const statsBefore = await read("sellerStats", [seller]);
   const titleA = "Live market " + tag;
   const titleB = "Undeclared market " + tag;
@@ -95,8 +97,10 @@ export default async function buyerLive({ baseUrl, accounts, assert, waitForWall
   await D.goto(baseUrl + "/sell");
   await waitForWallet(D, accounts.seller);
   await D.getByText("Withdrawable balance", { exact: true }).waitFor(T);
-  await statWait(D, "Purchases of your listings", String(statsBefore[1]));
-  await statWait(D, "Datasets for sale", String(statsBefore[0] + 2n));
+  const statsOpen = await read("sellerStats", [seller]);
+  assert(statsOpen[0] - statsBefore[0] === 2n, `the seller must have gained exactly 2 listings, got ${statsOpen[0] - statsBefore[0]}`);
+  await statWait(D, "Purchases of your listings", String(statsOpen[1]));
+  await statWait(D, "Datasets for sale", String(statsOpen[0]));
 
   // ---- (c) buyer A browses and filters (MKT-03) ----
   const A = track(
@@ -162,6 +166,7 @@ export default async function buyerLive({ baseUrl, accounts, assert, waitForWall
 
   // ---- (f) the first tab pays the exact price (MKT-06) ----
   await A.bringToFront();
+  const statsPreBuy = await read("sellerStats", [seller]);
   await buyA.click();
   const dialog = A.getByRole("dialog");
   await dialog.getByText("Confirm purchase").waitFor(T);
@@ -193,9 +198,13 @@ export default async function buyerLive({ baseUrl, accounts, assert, waitForWall
 
   // ---- (h) polling: the open dashboard catches the sale without a reload (DASH-01) ----
   await D.bringToFront();
-  await statWait(D, "Purchases of your listings", String(statsBefore[1] + 1n), 15_000);
-  const pending = (await read("sellerStats", [seller]))[2];
-  assert(pending === statsBefore[2] + PRICE_A, `withdrawable ${pending} must be before ${statsBefore[2]} + the price`);
+  await statWait(D, "Purchases of your listings", String(statsPreBuy[1] + 1n), 15_000);
+  const statsPostBuy = await read("sellerStats", [seller]);
+  const pending = statsPostBuy[2];
+  assert(
+    pending - statsPreBuy[2] === PRICE_A,
+    `withdrawable ${pending} must be ${statsPreBuy[2]} (read before the buy) + the price ${PRICE_A}`,
+  );
   await statWait(D, "Held until withdrawn", eth(pending), 15_000);
 
   // ---- (i) stale tab B pays again: refused, nothing charged twice ----
@@ -264,19 +273,25 @@ export default async function buyerLive({ baseUrl, accounts, assert, waitForWall
   // ---- (m) withdraw on the dashboard: balance identity (DASH-01) ----
   await D.bringToFront();
   const bal0 = await client.getBalance({ address: seller });
+  const blockBeforeWithdraw = await client.getBlockNumber();
   await D.getByRole("button", { name: "Withdraw balance" }).click();
   await D.getByText("Transaction confirmed").waitFor(T);
   await D.getByText("Nothing to withdraw yet.").waitFor(T);
   await statWait(D, "Held until withdrawn", "0 ETH");
   assert((await read("sellerStats", [seller]))[2] === 0n, "chain: nothing left to withdraw");
-  const withdrawn = (await logsOf("Withdrawn")).filter((l) => l.args.seller.toLowerCase() === seller.toLowerCase());
-  const lastW = withdrawn[withdrawn.length - 1];
-  assert(lastW.args.amountWei === pending, `Withdrawn amount ${lastW.args.amountWei} must equal pending ${pending}`);
+  // This click's withdrawal: the first Withdrawn event for the seller after the block read before the click.
+  const withdrawn = (await logsOf("Withdrawn")).filter(
+    (l) => l.args.seller.toLowerCase() === seller.toLowerCase() && l.blockNumber > blockBeforeWithdraw,
+  );
+  assert(withdrawn.length >= 1, "no Withdrawn event for the seller after the withdraw click");
+  const lastW = withdrawn[0];
+  const amount = lastW.args.amountWei;
+  assert(amount >= pending, `Withdrawn amount ${amount} must cover the ${pending} the sale added`);
   const receipt = await client.getTransactionReceipt({ hash: lastW.transactionHash });
   const bal1 = await client.getBalance({ address: seller });
   assert(
-    bal1 - bal0 + receipt.gasUsed * receipt.effectiveGasPrice === pending,
-    `balance identity: delta ${bal1 - bal0} + gas ${receipt.gasUsed * receipt.effectiveGasPrice} must equal ${pending}`,
+    bal1 - bal0 + receipt.gasUsed * receipt.effectiveGasPrice === amount,
+    `balance identity: delta ${bal1 - bal0} + gas ${receipt.gasUsed * receipt.effectiveGasPrice} must equal ${amount}`,
   );
   await D.goto(baseUrl + "/sell/datasets");
   await waitForWallet(D, accounts.seller);
@@ -293,11 +308,13 @@ export default async function buyerLive({ baseUrl, accounts, assert, waitForWall
   await waitForWallet(D, accounts.seller);
   await D.locator("ol > li", { hasText: "You withdrew" }).first().waitFor(T);
   const items = await D.locator("ol > li").allInnerTexts();
-  assert(items[0].startsWith("You withdrew " + eth(pending)), `newest event must be the withdrawal of ${eth(pending)}, got: ${items[0]}`);
+  const iW = items.findIndex((t) => t.startsWith("You withdrew " + eth(amount)));
   const iB = items.findIndex((t) => t.startsWith("0x7099…79C8 bought") && t.includes(`"${titleA}" for 0.05 ETH`));
   const iLB = items.findIndex((t) => t.startsWith(`You listed "${titleB}" for 0.02 ETH`));
   const iLA = items.findIndex((t) => t.startsWith(`You listed "${titleA}" for 0.05 ETH`));
-  assert(iB > 0 && iB < iLB && iLB < iLA, `activity order: bought ${iB}, listed B ${iLB}, listed A ${iLA}`);
+  // Newest first: this run's withdrawal, then its sale, then its two listings (B was listed after A).
+  assert(iW >= 0, `the withdrawal of ${eth(amount)} must be in the activity list`);
+  assert(iW < iB && iB < iLB && iLB < iLA, `activity order: withdrew ${iW}, bought ${iB}, listed B ${iLB}, listed A ${iLA}`);
   const actHash = await D.locator("ol > li").nth(iB).locator('[title^="0x"]').first().getAttribute("title");
   assert(actHash === hashA, `activity hash ${actHash} must equal the Purchased tx hash ${hashA}`);
 
@@ -311,6 +328,6 @@ export default async function buyerLive({ baseUrl, accounts, assert, waitForWall
   }
 
   console.log(
-    `  BUYER LIVE OK listing=${idA} undeclared=${idB} buy=${hashA.slice(0, 10)} sales=${statsBefore[1] + 1n} withdrawn=${pending} polled=1 ms=${Date.now() - t0}`,
+    `  BUYER LIVE OK listing=${idA} undeclared=${idB} buy=${hashA.slice(0, 10)} sales=${statsPreBuy[1] + 1n} withdrawn=${amount} polled=1 ms=${Date.now() - t0}`,
   );
 }

@@ -6,7 +6,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { createPublicClient, createWalletClient, http, getAddress } from "viem";
+import { createPublicClient, createWalletClient, http, getAddress, parseEventLogs } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { hardhat as viemHardhat } from "viem/chains";
 import { createConfig } from "@zama-fhe/sdk/viem";
@@ -62,9 +62,14 @@ export async function seedListing({
       const hash = await walletClient.writeContract(request);
       return publicClient.waitForTransactionReceipt({ hash });
     };
-    await send(reg, "createDataset", [name]);
-    const owned = await publicClient.readContract({ address: reg.address, abi: reg.abi, functionName: "datasetsByOwner", args: [account.address] });
-    const datasetId = owned[owned.length - 1].id;
+    // The ids come from this run's own receipts (DatasetCreated, Listed), never from "the last one the
+    // account owns", so a second seller-side run on the same node cannot hand this run its dataset.
+    const created = await send(reg, "createDataset", [name]);
+    const createdEvent = parseEventLogs({ abi: reg.abi, logs: created.logs, eventName: "DatasetCreated" }).find(
+      (e) => e.address.toLowerCase() === reg.address.toLowerCase() && e.args.owner.toLowerCase() === account.address.toLowerCase(),
+    );
+    if (!createdEvent) throw new Error("seed-listing: createDataset receipt has no DatasetCreated event");
+    const datasetId = createdEvent.args.datasetId;
     const list = bills ?? [
       { c: 150780n, k: 1, d: 20379 },
       { c: 332240n, k: 0, d: 20373 },
@@ -85,7 +90,11 @@ export async function seedListing({
     }
     const mask = categories.reduce((m, c) => m | (1 << c), 0);
     const r = await send(mkt, "listDataset", [datasetId, title, description, priceWei, mask]);
-    const listingId = await publicClient.readContract({ address: mkt.address, abi: mkt.abi, functionName: "listingOfDataset", args: [datasetId] });
+    const listedEvent = parseEventLogs({ abi: mkt.abi, logs: r.logs, eventName: "Listed" }).find(
+      (e) => e.address.toLowerCase() === mkt.address.toLowerCase() && e.args.datasetId === datasetId,
+    );
+    if (!listedEvent) throw new Error("seed-listing: listDataset receipt has no Listed event for dataset " + datasetId);
+    const listingId = listedEvent.args.listingId;
     return { name, datasetId, listingId, priceWei, mask, gas: r.gasUsed };
   } finally {
     sdk.terminate();
