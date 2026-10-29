@@ -43,6 +43,10 @@ function PurchasePanelInner({ listing }: { listing: Listing }) {
   const price = formatEth(listing.priceWei);
   const busy = isBusy(state);
   const confirmed = state.phase === "confirmed";
+  // A buy that failed (typically AlreadyPurchased from a stale tab) while the chain now says access is
+  // granted can only fail the same way again, so the dialog stops offering Pay and Try again. The reason
+  // stays readable and "Back to listing" closes it.
+  const failedButOwned = state.phase === "failed" && access.data === true;
 
   function onBuy() {
     reset();
@@ -125,11 +129,11 @@ function PurchasePanelInner({ listing }: { listing: Listing }) {
         title="Confirm purchase"
         confirmLabel={`Pay ${price}`}
         dismissLabel={confirmed ? "View my purchases" : "Back to listing"}
-        hideConfirm={confirmed}
+        hideConfirm={confirmed || failedButOwned}
         busy={busy}
         onConfirm={onConfirm}
         onDismiss={confirmed ? viewPurchases : closeDialog}
-        footer={<TxStatus state={state} onRetry={onConfirm} />}
+        footer={<TxStatus state={state} onRetry={failedButOwned ? undefined : onConfirm} />}
       >
         {confirmed ? (
           <p>Access granted.</p>

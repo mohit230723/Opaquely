@@ -7,6 +7,7 @@ const BUYER = "0x70997970C51812dc3A010C7d01b50e0d17dc79C8";
 
 const mocks = vi.hoisted(() => ({
   account: { address: undefined as string | undefined },
+  tx: { state: { phase: "idle" } as { phase: string; run?: number; reason?: string; code?: string } },
   access: { isPending: false, isError: false, data: undefined as boolean | undefined, refetch: () => Promise.resolve() },
 }));
 
@@ -14,7 +15,7 @@ vi.mock("next/navigation", () => ({ useRouter: () => ({ push: () => {} }) }));
 vi.mock("wagmi", () => ({ useAccount: () => mocks.account }));
 vi.mock("@/data/hooks", () => ({
   useHasAccess: () => mocks.access,
-  useBuyListing: () => ({ state: { phase: "idle" }, run: () => Promise.resolve(), reset: () => {} }),
+  useBuyListing: () => ({ state: mocks.tx.state, run: () => Promise.resolve(), reset: () => {} }),
 }));
 
 import { PurchasePanel, panelKey } from "./PurchasePanel";
@@ -38,6 +39,7 @@ beforeEach(() => {
   mocks.access.isPending = false;
   mocks.access.isError = false;
   mocks.access.data = undefined;
+  mocks.tx.state = { phase: "idle" };
 });
 
 describe("PurchasePanel access states", () => {
@@ -95,5 +97,28 @@ describe("PurchasePanel wallet switch (WR-02)", () => {
   it("changes the key when the listing changes and has a stable key without a wallet", () => {
     expect(panelKey(BUYER, "7")).not.toBe(panelKey(BUYER, "8"));
     expect(panelKey(undefined, "7")).toBe("none:7");
+  });
+});
+
+describe("PurchasePanel failed buy that turns out to be owned (IN-04)", () => {
+  const failed = { phase: "failed", run: 1, reason: "You already own this dataset.", code: "reverted" };
+
+  it("keeps Pay and Try again for a failed buy while access is still false", () => {
+    mocks.access.data = false;
+    mocks.tx.state = failed;
+    const html = render();
+    expect(html).toContain("Transaction failed");
+    expect(html).toContain("Try again");
+    expect(html).toContain("Pay 0.05 ETH");
+  });
+
+  it("hides Pay and Try again once access is granted, and keeps the reason and Back to listing", () => {
+    mocks.access.data = true;
+    mocks.tx.state = failed;
+    const html = render();
+    expect(html).toContain("You already own this dataset.");
+    expect(html).toContain("Back to listing");
+    expect(html).not.toContain("Try again");
+    expect(html).not.toContain("Pay 0.05 ETH");
   });
 });
