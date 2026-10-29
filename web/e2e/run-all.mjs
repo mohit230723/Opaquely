@@ -1,7 +1,8 @@
 // Headless Chrome e2e runner: starts `next start`, injects a test wallet, runs e2e/*.e2e.mjs.
 // Usage: node e2e/run-all.mjs [--port 3100] [script-name ...]
-// fhe-spike needs `hardhat node` on 127.0.0.1:8545. It runs when you name it (and then fails if no node
-// answers) or in an unfiltered run when a node is up; an unfiltered run with no node skips it.
+// fhe-spike and seller-live need `hardhat node` on 127.0.0.1:8545 (seller-live also needs the contracts
+// deployed). Each runs when you name it (and then fails if no node answers) or in an unfiltered run when a
+// node is up; an unfiltered run with no node skips both.
 import { spawn } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
@@ -11,6 +12,9 @@ import { walletStubInitScript } from "./wallet-stub.mjs";
 
 const webDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const e2eDir = path.join(webDir, "e2e");
+
+// Scripts that need `hardhat node` on 127.0.0.1:8545. An unfiltered run skips them when no node answers.
+const NEEDS_NODE = new Set(["fhe-spike", "seller-live"]);
 
 // ---- args ----
 const argv = process.argv.slice(2);
@@ -107,8 +111,8 @@ async function main() {
     for (const file of files) {
       const name = file.replace(/\.e2e\.mjs$/, "");
       if (filters.length > 0 && !filters.includes(name)) continue;
-      if (name === "fhe-spike" && filters.length === 0 && !(await nodeIsUp())) {
-        console.log("SKIP fhe-spike (no node)");
+      if (NEEDS_NODE.has(name) && filters.length === 0 && !(await nodeIsUp())) {
+        console.log(`SKIP ${name} (no node)`);
         continue;
       }
 
@@ -117,7 +121,7 @@ async function main() {
       const pageErrors = [];
 
       // roles: map of address -> "seller" | "buyer", written to localStorage on the app origin only.
-      async function newPage({ account = null, chainId = 31337, roles = {}, reducedMotion, viewport, rpcUrl } = {}) {
+      async function newPage({ account = null, chainId = 31337, roles = {}, reducedMotion, viewport, rpcUrl, data = "stub" } = {}) {
         const context = await browser.newContext({
           viewport: viewport ?? { width: 1280, height: 800 },
           reducedMotion: reducedMotion ? "reduce" : "no-preference",
@@ -128,6 +132,8 @@ async function main() {
           if (isLocalHost(route.request().url())) return route.continue();
           return route.abort();
         });
+        // The Phase 1 scripts drive the mock marketplace; a script that wants the real contracts passes data: "chain".
+        await context.addInitScript({ content: `window.__OPAQUELY_DATA = ${JSON.stringify(data)};` });
         if (account) {
           await context.addInitScript({ content: walletStubInitScript({ account, chainId, rpcUrl }) });
         }
