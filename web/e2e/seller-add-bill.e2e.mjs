@@ -42,6 +42,15 @@ export default async function sellerAddBill({ baseUrl, accounts, assert, waitFor
   const submit = page.getByRole("button", { name: "Add bill to dataset" });
   await submit.waitFor({ state: "visible", ...T });
 
+  // Enter on an untouched, incomplete form shows every error and focuses the first invalid field.
+  await page.getByLabel("Vendor (optional)").press("Enter");
+  await page.getByText("Enter an amount greater than 0.").waitFor({ state: "visible", ...T });
+  await page.getByText("Choose a category.").waitFor({ state: "visible", ...T });
+  assert(
+    await page.getByLabel("Total amount").evaluate((el) => el === document.activeElement),
+    "Enter on an incomplete form must focus the first invalid field",
+  );
+
   await page.getByLabel("Total amount").fill("0");
   await page.getByLabel("Total amount").blur();
   await page.getByText("Enter an amount greater than 0.").waitFor({ state: "visible", ...T });

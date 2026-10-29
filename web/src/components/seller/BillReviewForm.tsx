@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, type FocusEvent, type FormEvent } from "react";
+import { useRef, useState, type FocusEvent, type FormEvent, type KeyboardEvent } from "react";
 import { AlertIcon } from "@/components/icons";
 import { Button } from "@/components/ui/Button";
 import { ChipGroup } from "@/components/ui/ChipToggle";
@@ -62,6 +62,11 @@ function ReviewFormBody({ onSubmit, busy }: { onSubmit: (draft: BillDraft) => vo
 
   function onSubmitForm(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    attemptSubmit();
+  }
+
+  /** Submits a valid draft; otherwise reveals every error and focuses the first invalid field. */
+  function attemptSubmit() {
     if (busy) return;
     const checked = validateBillDraft(fields, new Date());
     if (checked.ok) {
@@ -75,6 +80,16 @@ function ReviewFormBody({ onSubmit, busy }: { onSubmit: (draft: BillDraft) => vo
     else categoryRef.current?.querySelector<HTMLButtonElement>('[role="radio"]')?.focus();
   }
 
+  // The submit button is aria-disabled while the draft is invalid (UI-SPEC), and Button blocks its
+  // click, which is also what Enter in a text field synthesizes. So an Enter on an incomplete form
+  // would do nothing. Handle it here so it shows the errors and focuses the first invalid field.
+  function onFormKeyDown(e: KeyboardEvent<HTMLFormElement>) {
+    if (e.key !== "Enter" || e.nativeEvent.isComposing || result.ok) return;
+    if (!(e.target instanceof HTMLInputElement)) return;
+    e.preventDefault();
+    attemptSubmit();
+  }
+
   function onCategoryBlur(e: FocusEvent<HTMLDivElement>) {
     if (!e.currentTarget.contains(e.relatedTarget)) touch("category");
   }
@@ -82,7 +97,7 @@ function ReviewFormBody({ onSubmit, busy }: { onSubmit: (draft: BillDraft) => vo
   const categoryError = visible("category");
 
   return (
-    <form onSubmit={onSubmitForm} noValidate aria-label="Bill details" className="flex flex-col gap-6">
+    <form onSubmit={onSubmitForm} onKeyDown={onFormKeyDown} noValidate aria-label="Bill details" className="flex flex-col gap-6">
       <Field
         ref={vendorRef}
         label="Vendor (optional)"
