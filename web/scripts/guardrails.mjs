@@ -64,9 +64,9 @@ function checkPins() {
 }
 
 // ---------------------------------------------------------------- privacy
-// Files that may import an FHE SDK or the OCR package. Empty now; Phases 2 and 4 open exactly
-// src/lib/fhe.ts, src/lib/zama.ts and the OCR module.
-const ALLOWED_SDK_FILES = [];
+// Files that may import an FHE SDK or the OCR package. Phase 2 opened exactly these two; Phase 4
+// adds the OCR module.
+const ALLOWED_SDK_FILES = ["src/lib/fhe.ts", "src/lib/zama.ts"];
 const STORAGE_ALLOWED_FILE = "src/lib/role.ts";
 
 const SOURCE_EXT = /\.(ts|tsx|js|jsx)$/;
@@ -92,6 +92,11 @@ const LINE_RULES = [
   { rule: "network-send(FormData)", test: (l) => /new\s+FormData/.test(l) },
 ];
 
+// A static value import of the FHE SDK is evaluated by the server render, which is the SSR crash
+// vector (the SDK needs browser globals). Inside the allowed files only `import type` and
+// `import()` inside async functions are accepted.
+const SDK_STATIC_VALUE_IMPORT = /^\s*import\s+(?!type\b)[^(]*?from\s+["']@zama-fhe\/|^\s*import\s+["']@zama-fhe\//;
+
 function checkPrivacy() {
   const srcDir = path.join(webDir, "src");
   const files = [];
@@ -105,6 +110,7 @@ function checkPrivacy() {
         if (rule.sdkFile && ALLOWED_SDK_FILES.includes(r)) continue;
         if (rule.test(text)) violation(rule.rule, r, i + 1);
       }
+      if (ALLOWED_SDK_FILES.includes(r) && SDK_STATIC_VALUE_IMPORT.test(text)) violation("sdk-static-import", r, i + 1);
     });
   }
   for (const name of ["next.config.ts", "next.config.mjs", "next.config.js"]) {

@@ -100,7 +100,7 @@ async function main() {
       const pageErrors = [];
 
       // roles: map of address -> "seller" | "buyer", written to localStorage on the app origin only.
-      async function newPage({ account = null, chainId = 31337, roles = {}, reducedMotion, viewport } = {}) {
+      async function newPage({ account = null, chainId = 31337, roles = {}, reducedMotion, viewport, rpcUrl } = {}) {
         const context = await browser.newContext({
           viewport: viewport ?? { width: 1280, height: 800 },
           reducedMotion: reducedMotion ? "reduce" : "no-preference",
@@ -112,7 +112,7 @@ async function main() {
           return route.abort();
         });
         if (account) {
-          await context.addInitScript({ content: walletStubInitScript({ account, chainId }) });
+          await context.addInitScript({ content: walletStubInitScript({ account, chainId, rpcUrl }) });
         }
         await context.addInitScript(
           ({ origin, withWallet, roleEntries }) => {

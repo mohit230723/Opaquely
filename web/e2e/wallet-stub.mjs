@@ -1,7 +1,7 @@
 // Injected EIP-1193 test wallet, announced over EIP-6963.
 // It never sets isMetaMask. Tests drive it through window.__opaquelyE2E.
 
-function install({ account, chainId }) {
+function install({ account, chainId, rpcUrl }) {
   let currentAccount = account;
   let currentChainId = chainId;
   const listeners = {};
@@ -43,6 +43,29 @@ function install({ account, chainId }) {
           return null;
         case "eth_blockNumber":
           return "0x1";
+        case "eth_sendTransaction":
+        case "eth_signTypedData_v4":
+        case "personal_sign": {
+          // Only when a node RPC is configured. A Hardhat node keeps its dev accounts unlocked and
+          // signs for them. Without rpcUrl these stay unsupported, as in Phase 1.
+          if (!rpcUrl) {
+            const err = new Error("Unsupported method: " + method);
+            err.code = 4200;
+            throw err;
+          }
+          const res = await fetch(rpcUrl, {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
+          });
+          const body = await res.json();
+          if (body.error) {
+            const err = new Error(body.error.message);
+            err.code = body.error.code;
+            throw err;
+          }
+          return body.result;
+        }
         default: {
           const err = new Error("Unsupported method: " + method);
           err.code = 4200;
@@ -96,6 +119,6 @@ function install({ account, chainId }) {
 }
 
 /** Returns a self-contained script string for context.addInitScript({ content }). */
-export function walletStubInitScript({ account, chainId }) {
-  return `(${install.toString()})(${JSON.stringify({ account, chainId })});`;
+export function walletStubInitScript({ account, chainId, rpcUrl }) {
+  return `(${install.toString()})(${JSON.stringify({ account, chainId, rpcUrl })});`;
 }
