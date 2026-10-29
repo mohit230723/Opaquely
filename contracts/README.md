@@ -50,7 +50,7 @@ Owns the encrypted bills, the FHE math, the ACL and the seal.
 
 - The seller calls `addRecord(datasetId, amount euint64 cents, category euint8, date euint32, one inputProof)` directly on the registry, because the input proof binds (registry, seller). One proof covers all three values.
 - Category ids: 0 Utilities, 1 Groceries/Food, 2 Medical, 3 Transport/Fuel, 4 Shopping, 5 Other. This is the same order as `web/src/lib/categories.ts`. Ids above 5 are clamped into Other.
-- The anomaly threshold is 500000 cents, plaintext, set at deploy by `ANOMALY_THRESHOLD_CENTS`. `MIN_BILLS_TO_LIST` is 3.
+- The anomaly threshold is 500000 cents, plaintext, set at deploy by `ANOMALY_THRESHOLD_CENTS`. `MIN_BILLS_TO_LIST` is 3 and `MAX_BILLS_PER_DATASET` is 50 (`TooManyBills(maximum)` on the 51st `addRecord`).
 - Per-bill handles are decryptable by the seller only. After a purchase the buyer gets exactly 9 aggregate handles: 6 category totals, the grand total, the encrypted record count and the anomaly count.
 - The vendor never goes on chain.
 - `setMarketplace` is deployer-only and one-time. It rejects the zero address and any address without code (`InvalidMarketplace`), so a rejected call does not use up the one-shot.
@@ -68,6 +68,7 @@ No FHE imports.
 - `getListings` (newest first), `getListing`, `listingsBySeller`, `listingOfDataset`
 - `purchasesByBuyer`, `hasAccess` (on both contracts), `sellerStats`
 - `datasetsByOwner`, `getDataset`, `getBillHandles`, `getAggregates`
+- The per-user views `datasetsByOwner`, `listingsBySeller` and `purchasesByBuyer` return the whole array with no paging. They are bounded by demo scale (one wallet, a handful of rows) and only the wallet's own actions can grow them. `getBillHandles` is bounded by `MAX_BILLS_PER_DATASET`. Only `getListings` is paged. Add `(offset, limit)` variants before any real deployment.
 - Events `Listed`, `Purchased`, `Withdrawn` (each with a uint64 `at` timestamp), plus `DatasetCreated` and `RecordAdded`, queried from `deployBlock`. The purchase tx hash comes from the `Purchased` event.
 
 ### Deploy
@@ -90,7 +91,7 @@ npm run node:stop
 `web/src/lib/tx-errors.ts` is not edited in Phase 3. AlreadyPurchased, OwnListing and PriceChanged already have reasons in the web table.
 
 - Marketplace: InvalidTitle, DescriptionTooLong, ZeroPrice, InvalidCategoryMask, ListingNotFound, OwnListing, AlreadyPurchased, PriceChanged, WrongPayment, NothingToWithdraw, TransferFailed
-- DatasetRegistry: InvalidName, DatasetNotFound, NotDatasetOwner, DatasetIsSealed, TooFewBills, OnlyMarketplace, NotDeployer, MarketplaceAlreadySet, InvalidMarketplace, NotSealed
+- DatasetRegistry: InvalidName, DatasetNotFound, NotDatasetOwner, DatasetIsSealed, TooFewBills, TooManyBills, OnlyMarketplace, NotDeployer, MarketplaceAlreadySet, InvalidMarketplace, NotSealed
 
 ### Measured costs on the local mock
 

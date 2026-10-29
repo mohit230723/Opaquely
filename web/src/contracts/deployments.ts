@@ -2,7 +2,7 @@
 export const deployments = {
   "31337": {
     "chainId": 31337,
-    "deployedAt": "2026-10-29T05:09:06.402Z",
+    "deployedAt": "2026-10-29T05:11:08.208Z",
     "deployBlock": 27,
     "anomalyThresholdCents": "500000",
     "DatasetRegistry": {
@@ -100,6 +100,17 @@ export const deployments = {
             }
           ],
           "name": "TooFewBills",
+          "type": "error"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "uint32",
+              "name": "maximum",
+              "type": "uint32"
+            }
+          ],
+          "name": "TooManyBills",
           "type": "error"
         },
         {
@@ -207,6 +218,19 @@ export const deployments = {
           ],
           "name": "RecordAdded",
           "type": "event"
+        },
+        {
+          "inputs": [],
+          "name": "MAX_BILLS_PER_DATASET",
+          "outputs": [
+            {
+              "internalType": "uint32",
+              "name": "",
+              "type": "uint32"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
         },
         {
           "inputs": [],
@@ -1412,6 +1436,17 @@ export const deployments = {
             }
           ],
           "name": "TooFewBills",
+          "type": "error"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "uint32",
+              "name": "maximum",
+              "type": "uint32"
+            }
+          ],
+          "name": "TooManyBills",
           "type": "error"
         },
         {

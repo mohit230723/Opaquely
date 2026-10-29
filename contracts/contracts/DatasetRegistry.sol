@@ -22,6 +22,9 @@ contract DatasetRegistry is ZamaEthereumConfig, IDatasetRegistry {
     // 3 Transport/Fuel, 4 Shopping, 5 Other.
     uint8 public constant NUM_CATEGORIES = 6;
     uint32 public constant MIN_BILLS_TO_LIST = 3;
+    /// Hard cap so getBillHandles stays inside public RPC eth_call limits and demo-scale gas. Bills are
+    /// added one per transaction at about 3M gas each, so 50 is already a long seller session.
+    uint32 public constant MAX_BILLS_PER_DATASET = 50;
     uint256 public constant MAX_NAME_BYTES = 240; // 4 x the 60 characters the UI allows
 
     /// A bill above this many cents counts as an anomaly. Plaintext on purpose: a scalar compare is cheaper.
@@ -87,6 +90,7 @@ contract DatasetRegistry is ZamaEthereumConfig, IDatasetRegistry {
     error NotDatasetOwner();
     error DatasetIsSealed();
     error TooFewBills(uint32 have, uint32 minimum);
+    error TooManyBills(uint32 maximum);
     error OnlyMarketplace();
     error NotDeployer();
     error MarketplaceAlreadySet();
@@ -142,6 +146,7 @@ contract DatasetRegistry is ZamaEthereumConfig, IDatasetRegistry {
         if (ds.owner == address(0)) revert DatasetNotFound(datasetId);
         if (ds.owner != msg.sender) revert NotDatasetOwner();
         if (ds.isSealed) revert DatasetIsSealed();
+        if (ds.recordCount >= MAX_BILLS_PER_DATASET) revert TooManyBills(MAX_BILLS_PER_DATASET);
 
         euint64 amount = FHE.fromExternal(amountExt, inputProof);
         // A category above 5 cannot match any bucket, so clamp it into "Other" and totals always add up.

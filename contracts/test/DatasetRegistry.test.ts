@@ -1,6 +1,6 @@
 import { expect } from "chai";
 import { network } from "hardhat";
-import { addBill, decryptAggregates, deployAll, expectDenied, expected, THRESHOLD_CENTS, type Bill } from "./helpers.js";
+import { addBill, decryptAggregates, deployAll, expectDenied, expected, PRICE, THRESHOLD_CENTS, type Bill } from "./helpers.js";
 
 const { ethers, fhevm } = await network.connect();
 
@@ -82,6 +82,23 @@ describe("DatasetRegistry: encrypted aggregates (COMP-01..04)", function () {
     await expect(registry.connect(stranger).grantAccess(1n, stranger.address)).to.be.revertedWithCustomError(registry, "OnlyMarketplace");
     await expect(registry.connect(stranger).setMarketplace(stranger.address)).to.be.revertedWithCustomError(registry, "NotDeployer");
     await expect(registry.connect(deployer).setMarketplace(marketAddress)).to.be.revertedWithCustomError(registry, "MarketplaceAlreadySet");
+  });
+
+  it("caps a dataset at MAX_BILLS_PER_DATASET bills, and the cap leaves the seller able to list", async function () {
+    this.timeout(300_000);
+    const [seller] = await ethers.getSigners();
+    const { registry, market, registryAddress } = await deployAll(ethers);
+    const max = await registry.MAX_BILLS_PER_DATASET();
+    expect(max).to.equal(50n);
+    await (await registry.createDataset("full house")).wait();
+    for (let i = 0n; i < max; i++) await addBill(fhevm, registry, registryAddress, seller, 1n, BILLS[Number(i % 3n)]);
+    expect((await registry.getDataset(1n)).recordCount).to.equal(max);
+    await expect(addBill(fhevm, registry, registryAddress, seller, 1n, BILLS[0]))
+      .to.be.revertedWithCustomError(registry, "TooManyBills")
+      .withArgs(max);
+    expect((await registry.getDataset(1n)).recordCount, "the rejected bill must not be stored").to.equal(max);
+    expect(await registry.getBillHandles(1n)).to.have.length(Number(max));
+    await expect(market.connect(seller).listDataset(1n, "t", "d", PRICE, 1)).to.emit(market, "Listed");
   });
 
   it("setMarketplace rejects the zero address and an EOA, and stays one-time and deployer-only", async function () {
