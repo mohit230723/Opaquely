@@ -79,6 +79,7 @@ async function deploy(name, args) {
   return { art, address: getAddress(receipt.contractAddress), block: receipt.blockNumber };
 }
 
+// If a later step fails, contracts already deployed stay on chain (gas spent) and nothing is recorded, so a rerun deploys again.
 const registry = await deploy("DatasetRegistry", [threshold]);
 const market = await deploy("Marketplace", [registry.address]);
 const linkHash = await wallet.writeContract({
@@ -88,7 +89,8 @@ const linkHash = await wallet.writeContract({
   args: [market.address],
   chain: null,
 });
-await publicClient.waitForTransactionReceipt({ hash: linkHash });
+const linkReceipt = await publicClient.waitForTransactionReceipt({ hash: linkHash });
+if (linkReceipt.status !== "success") throw new Error("setMarketplace reverted; nothing was written to deployments.json");
 console.log("linked: registry.setMarketplace(" + market.address + ")");
 
 // The Marketplace reverts with the registry's errors (TooFewBills, DatasetIsSealed, ...). viem can only decode
