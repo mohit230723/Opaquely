@@ -98,6 +98,6 @@ This is ROADMAP criterion 3 and LAND-03. The code side is built and tested, but 
 7. **Run the flow.** Seller path (create a dataset, add 3 bills, list), buyer path (buy, `Access granted`), then withdraw.
 8. **Audit the network.** In DevTools, record the relayer and key-download hosts, pass them as `extraAllowedOrigins` to `createPrivacyAudit` in `web/e2e/helpers/privacy-audit.mjs`, and confirm that no image, OCR text or vendor appears in any request, console line, storage or IndexedDB.
 9. **If the worker or WASM fails** (a console warning or `EncryptOffloadUnavailableError`): change the Sepolia branch in `web/src/lib/zama.ts` to `web({ offloadEncrypt: false })`. If the build itself fails, use `next build --webpack` and `next dev --webpack`, and as a last resort `next@15.5.28`.
-10. **Return to local.** Unset the flag and rebuild. The Sepolia entry is inert without the flag. The rehearsal (`npm run demo:rehearse`) always builds with the flag off.
+10. **Return to local.** Unset the flag and rebuild. The Sepolia entry is inert without the flag. The rehearsal (`npm --prefix web run demo:rehearse`) always builds with the flag off.
 
 **Keys.** `DEPLOYER_PRIVATE_KEY` lives in the shell environment only. It is never written to a file, never committed, never put in a `NEXT_PUBLIC_` variable, and never printed by the deploy script.
