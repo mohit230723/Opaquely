@@ -22,7 +22,9 @@ export interface ParsedReceipt {
 // A money token: grouped or plain digits with exactly two decimals (a bill total almost always has
 // them, and it keeps dates, phone numbers, quantities and invoice numbers out), optionally after a
 // currency marker. Western and Indian grouping both match; parseAmountToCents tells them apart.
-const MONEY = /(?:(?:rs|inr|usd)\.?|₹|\$)?\s*(\d{1,3}(?:,\d{2,3})+\.\d{2}|\d+\.\d{2})(?!\d)/gi;
+// The lookbehind and the trailing "\.\d" check keep out pieces of longer numbers, such as "31.10" from
+// the dotted date 31.10.2026.
+const MONEY = /(?<![\d.,/-])(?:(?:rs|inr|usd)\.?|₹|\$)?\s*(\d{1,3}(?:,\d{2,3})+\.\d{2}|\d+\.\d{2})(?!\d|\.\d)/gi;
 // On a total line a bare integer right after the label or a currency marker counts too ("Total 1500").
 const MONEY_BARE_INT = /(?:(?:rs|inr)\.?|₹|total|due|payable|amount)\s*[:-]?\s*(\d{1,3}(?:,\d{2,3})+|\d{1,9})(?![\d.,/]\d)/gi;
 
@@ -32,6 +34,11 @@ const TIER2 = /\btotal\b/i;
 // A line that mentions one of these is never the bill total.
 const NOT_TOTAL =
   /\b(sub\s*-?\s*total|total\s*(?:items?|qty|quantity|tax|gst|discount|savings?|saved)|tendered|change|cash|paid|received|round(?:ing)?\s*off|discount|mrp|saved|tax|gst|cgst|sgst|igst|vat|cess|tip)\b/i;
+
+// "(Incl. Tax)", "incl. GST" and "inclusive of all taxes" qualify a total, they do not make the line a tax line.
+const INCL_PAREN = /\(\s*(?:incl|inclusive|including)[^)]*\)/gi;
+const INCL_TAX = /\b(?:incl(?:usive|uding)?)\b\.?\s*(?:of\s+)?(?:all\s+)?(?:taxes|tax|gst|vat|cess)\b/gi;
+const isNotTotal = (line: string): boolean => NOT_TOTAL.test(line.replace(INCL_PAREN, " ").replace(INCL_TAX, " "));
 
 function lineMoney(line: string, bare: boolean): bigint[] {
   const out: bigint[] = [];
@@ -59,9 +66,9 @@ export function findTotalCents(text: string): bigint | null {
   const tiers: [bigint[], bigint[]] = [[], []];
   lines.forEach((line, i) => {
     if (!line) return;
-    const tier = TIER1.test(line) ? 0 : TIER2.test(line) && !NOT_TOTAL.test(line) ? 1 : -1;
+    const tier = TIER1.test(line) ? 0 : TIER2.test(line) && !isNotTotal(line) ? 1 : -1;
     if (tier === -1) return;
-    if (tier === 0 && NOT_TOTAL.test(line.replace(TIER1, ""))) return; // "Total tax amount" etc.
+    if (tier === 0 && isNotTotal(line.replace(TIER1, ""))) return; // "Total tax amount" etc.
     let found = lineMoney(line, true);
     if (found.length === 0) {
       // The label and its value can land on two OCR lines.
@@ -73,7 +80,7 @@ export function findTotalCents(text: string): bigint | null {
   for (const t of tiers) if (t.length > 0) return max(t);
 
   // No label found: the largest amount on any line that is not tender, change, tax or a discount.
-  const rest = lines.filter((l) => l && !NOT_TOTAL.test(l)).flatMap((l) => lineMoney(l, false));
+  const rest = lines.filter((l) => l && !isNotTotal(l)).flatMap((l) => lineMoney(l, false));
   return rest.length > 0 ? max(rest) : null;
 }
 

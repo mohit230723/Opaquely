@@ -118,3 +118,43 @@ describe("suggestCategory", () => {
     expect(suggestCategory(text, vendor)).toBe(id);
   });
 });
+
+describe("review fixes: dotted dates are not money (WR-01)", () => {
+  it("does not read 31.10.2026 as 31.10 next to a real total", () => {
+    expect(findTotalCents("Total Due 25.00 by 31.10.2026")).toBe(2500n);
+    expect(findTotalCents("Invoice 12.05.2024\nGrand Total 480.00")).toBe(48000n);
+  });
+
+  it("finds no amount on a receipt whose only decimals come from a dotted date", () => {
+    expect(findTotalCents("Thank you\nVisit again 12.05.2024")).toBeNull();
+    expect(findTotalCents("Date 31.10.2026\nSerial 4471")).toBeNull();
+    const parsed = parseReceiptText("Corner Cafe\nDate 12.05.2024\nThank you", TODAY);
+    expect(parsed.amount).toBe("");
+    expect(parsed.amountCents).toBeNull();
+    expect(parsed.date).toBe("2024-05-12");
+  });
+
+  it("still reads plain, grouped and sentence-final amounts", () => {
+    expect(findTotalCents("Total 25.00.")).toBe(2500n);
+    expect(findTotalCents("Total Rs.1,507.80")).toBe(150780n);
+    expect(findTotalCents("Total 1,24,580.00 on 12.05.2024")).toBe(12458000n);
+  });
+});
+
+describe("review fixes: a tax qualifier on the total line is not a tax line (WR-02)", () => {
+  it("accepts Grand Total (Incl. Tax) as the total", () => {
+    expect(findTotalCents("Item A 1000.00\nTax 180.00\nGrand Total (Incl. Tax) 1180.00")).toBe(118000n);
+  });
+
+  it("accepts Total incl. GST and inclusive-of-tax wording", () => {
+    expect(findTotalCents("Item A 500.00\nItem B 600.00\nTotal incl. GST 1180.00")).toBe(118000n);
+    expect(findTotalCents("Item A 500.00\nItem B 600.00\nTotal (inclusive of tax) 1,180.00")).toBe(118000n);
+    expect(findTotalCents("Item A 500.00\nItem B 600.00\nGrand Total (Incl. all taxes)\n1180.00")).toBe(118000n);
+  });
+
+  it("still ignores the tax lines themselves", () => {
+    expect(findTotalCents("Total Tax 180.00\nTotal 1180.00")).toBe(118000n);
+    expect(findTotalCents("Total GST 90.00\nTotal incl. GST 1180.00")).toBe(118000n);
+    expect(findTotalCents("Item A 500.00\nGST 90.00\nCGST 45.00")).toBe(50000n);
+  });
+});
