@@ -5,17 +5,50 @@
 // and sees Access granted. The seller's dashboard, left open, catches the sale by polling, and Withdraw
 // moves exactly the pending ETH into the seller's wallet.
 // It compares chain deltas and finds its own data by a per-run tag, so it also passes on a used node.
+// The same run is audited with helpers/privacy-audit.mjs: only the app, the node and two tolerated wallet hosts
+// may be contacted, and no bill marker may appear in a request, console line, page error, buyer page text,
+// storage value or IndexedDB record. The badge, its tooltip and the footer must say the local chain is a mock.
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createPublicClient, formatEther, getAddress, http } from "viem";
 import { hardhat as viemHardhat } from "viem/chains";
+import { createPrivacyAudit } from "./helpers/privacy-audit.mjs";
 
 const RPC = "http://127.0.0.1:8545";
 const T = { timeout: 30_000 };
 const PRICE = 50_000_000_000_000_000n;
 const here = path.dirname(fileURLToPath(import.meta.url));
 const deployments = JSON.parse(fs.readFileSync(path.resolve(here, "../src/contracts/deployments.json"), "utf8"))["31337"];
+
+// Mirrors NETWORK_TOOLTIP and LOCAL_MOCK_NOTE in src/lib/network.ts (that file is TypeScript, so it is copied).
+const NETWORK_TOOLTIP = "Transactions run on a local test chain. Encryption here is simulated, not real FHE.";
+const LOCAL_MOCK_NOTE = "Local FHEVM mock: a local test chain. Encryption is simulated, not real FHE. Never enter a real bill.";
+
+// What a leak would look like: vendors, the bill amounts as text, the PNG header in base64, and lines that only
+// the OCR text holds (the review form never shows them).
+const MARKERS = [
+  "SHREE GANESH",
+  "Bright Power",
+  "CityCare",
+  "1507.80",
+  "1,507.80",
+  "3322.40",
+  "3,322.40",
+  "8345.50",
+  "8,345.50",
+  "iVBORw0KGgo",
+  "GSTIN 27ABCDE1234F1Z5",
+  "CASH TENDERED",
+  "Consumer No",
+  "1002938475",
+  "Plot 14, MG Road",
+  "Thank you, visit again",
+  "INV-20817",
+  "Metformin",
+  "Insulin Glargine",
+  "Station Road",
+];
 
 /** Mirrors formatEth in src/lib/format.ts: at most 6 decimals, trailing zeros trimmed. */
 function eth(wei) {
@@ -61,6 +94,15 @@ export default async function demoRehearsal({ baseUrl, accounts, assert, waitFor
       [caption, expected],
       { timeout },
     );
+  const audit = createPrivacyAudit({ baseUrl, rpcUrl: RPC, markers: MARKERS });
+  /** The header badge, its tooltip and the footer all say the local chain is a mock (T-06-05). */
+  const assertHonest = async (page, where) => {
+    const badge = page.getByTestId("network-badge");
+    await badge.waitFor(T);
+    assert((await badge.innerText()).includes("Local FHEVM mock"), `${where}: the badge must read Local FHEVM mock`);
+    assert((await badge.getAttribute("title")) === NETWORK_TOOLTIP, `${where}: the badge tooltip must be the mock tooltip`);
+    assert((await page.locator("footer").innerText()).includes(LOCAL_MOCK_NOTE), `${where}: the footer must say the local chain is a mock`);
+  };
   const seller = getAddress(accounts.seller);
   const buyer = getAddress(accounts.buyer);
 
@@ -70,6 +112,7 @@ export default async function demoRehearsal({ baseUrl, accounts, assert, waitFor
 
   // ---- (b) seller page S: create the dataset ----
   const S = await newPage({ account: accounts.seller, roles: { [accounts.seller]: "seller" }, rpcUrl: RPC, data: "chain" });
+  await audit.track(S, "seller");
   await S.goto(baseUrl + "/sell/datasets/new");
   await waitForWallet(S, accounts.seller);
   await S.getByLabel("Dataset name").fill("Rehearsal " + tag);
@@ -129,13 +172,17 @@ export default async function demoRehearsal({ baseUrl, accounts, assert, waitFor
   await waitForWallet(S, accounts.seller);
   await S.getByText("Withdrawable balance", { exact: true }).waitFor(T);
   await statWait(S, "Purchases of your listings", String(statsBefore[1]));
+  await assertHonest(S, "seller /sell");
 
   // ---- (f) buyer page B: find, buy, access ----
   const B = await newPage({ account: accounts.buyer, roles: { [accounts.buyer]: "buyer" }, rpcUrl: RPC, data: "chain" });
+  await audit.track(B, "buyer", { bodyText: true });
   await B.goto(baseUrl + "/buy");
   await waitForWallet(B, accounts.buyer);
   const card = B.getByRole("link", { name: "Rehearsal market " + tag });
   await card.waitFor(T);
+  await assertHonest(B, "buyer /buy");
+  await audit.snapshotBody(B, "buyer on /buy");
   const cardText = await card.innerText();
   for (const s of ["0.05 ETH", "3 bills", "Utilities", "Groceries/Food", "Medical"]) {
     assert(cardText.includes(s), `the listing card must show "${s}", got: ${cardText}`);
@@ -158,6 +205,7 @@ export default async function demoRehearsal({ baseUrl, accounts, assert, waitFor
   await waitForWallet(B, accounts.buyer);
   await B.getByText("Access granted", { exact: true }).waitFor(T);
   assert((await exactCount(B, "Access granted")) === 1, "the detail page must show the Access granted chip");
+  await audit.snapshotBody(B, "buyer on the listing after access");
   const decrypt = B.getByRole("button", { name: "Decrypt insights (coming in M2)" });
   assert((await decrypt.getAttribute("aria-disabled")) === "true", "the decrypt button must be disabled");
 
@@ -189,7 +237,11 @@ export default async function demoRehearsal({ baseUrl, accounts, assert, waitFor
     `balance identity: delta ${bal1 - bal0} + gas ${receipt.gasUsed * receipt.effectiveGasPrice} must equal ${pending}`,
   );
 
+  // ---- (i) the audit, over both pages ----
+  await audit.snapshotBody(B, "buyer at the end");
+  const { requests, origins } = await audit.assertClean();
+
   console.log(
-    `  DEMO PATH OK dataset=${datasetId} listing=${listingId} mask=7 ocr=3 buy=${buyHash.slice(0, 10)} withdrawn=${pending}`,
+    `  DEMO PATH OK dataset=${datasetId} listing=${listingId} mask=7 ocr=3 buy=${buyHash.slice(0, 10)} withdrawn=${pending} audit=clean requests=${requests} origins=${origins.join(",")}`,
   );
 }

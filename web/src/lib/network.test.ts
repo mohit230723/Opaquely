@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { SUPPORTED_CHAIN_IDS, chainDisplayName, isWrongNetwork, networkLabel } from "./network";
+import { SUPPORTED_CHAIN_IDS, chainDisplayName, chainModeNote, isWrongNetwork, networkLabel } from "./network";
 
 describe("isWrongNetwork", () => {
   it("is false while disconnected, whatever chain is reported", () => {
@@ -44,5 +44,30 @@ describe("chainDisplayName", () => {
     expect(chainDisplayName(11155111)).toBe("Sepolia");
     expect(chainDisplayName(31337)).toBe("Hardhat");
     expect(chainDisplayName(999)).toBe("chain 999");
+  });
+});
+
+describe("chainModeNote", () => {
+  const LOCAL = "Local FHEVM mock: a local test chain. Encryption is simulated, not real FHE. Never enter a real bill.";
+
+  it("says plainly that the local chain is a mock, for the local chain and for no chain", () => {
+    expect(chainModeNote(31337)).toBe(LOCAL);
+    expect(chainModeNote(undefined)).toBe(LOCAL);
+  });
+
+  it("describes Sepolia as real FHE on a public test network", () => {
+    expect(chainModeNote(11155111)).toBe(
+      "Sepolia, real FHE: a public test network. Amounts, dates and categories are encrypted with Zama's FHE in this browser. Test ETH only.",
+    );
+  });
+
+  it("is empty on an unsupported chain", () => {
+    expect(chainModeNote(1)).toBe("");
+  });
+
+  it("never claims real FHE for the local chain", () => {
+    expect(chainModeNote(31337)).toContain("not real FHE");
+    expect(chainModeNote(31337).replace("not real FHE", "")).not.toMatch(/real FHE/i);
+    expect(chainModeNote(undefined)).toContain("not real FHE");
   });
 });

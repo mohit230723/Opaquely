@@ -1,6 +1,7 @@
 "use client";
 
-import { useStubControls } from "@/data/provider";
+import { useDataScope, useStubControls } from "@/data/provider";
+import { chainModeNote } from "@/lib/network";
 
 function Toggle({ label, checked, onChange }: { label: string; checked: boolean; onChange: (v: boolean) => void }) {
   return (
@@ -16,9 +17,14 @@ function Toggle({ label, checked, onChange }: { label: string; checked: boolean;
   );
 }
 
-/** Honest label for the stub data layer plus the demo toggles that force a failure or an empty wallet. */
+/**
+ * Honest label for the data layer. Stub mode says nothing is sent to a chain and offers the demo toggles that
+ * force a failure or an empty wallet. Chain mode says what the connected chain is: a local mock that is not
+ * real FHE, or Sepolia with real FHE.
+ */
 export function AppFooter() {
   const stub = useStubControls();
+  const scope = useDataScope();
 
   return (
     <footer className="border-t border-border bg-surface px-4 py-6 text-sm text-muted sm:px-6">
@@ -37,7 +43,7 @@ export function AppFooter() {
             </div>
           </>
         ) : (
-          <p>Opaquely</p>
+          <p>{chainModeNote(scope.chainId)}</p>
         )}
       </div>
     </footer>
