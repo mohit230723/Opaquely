@@ -37,7 +37,11 @@ export function PurchasePanel({ listing }: { listing: Listing }) {
   function onConfirm() {
     if (busy) return;
     // The price the buyer saw: if it changed meanwhile, the layer rejects with a readable reason.
-    void run(listing.priceWei);
+    // After the attempt settles, access is re-read from the chain: a stale tab whose buy failed with
+    // AlreadyPurchased shows "Access granted" at once instead of after the next poll. On success
+    // useBuyListing has already invalidated hasAccess, so the extra read is harmless. Access is only ever
+    // read from hasAccess, never set from the tx result.
+    void run(listing.priceWei).then(() => access.refetch());
   }
 
   function closeDialog() {

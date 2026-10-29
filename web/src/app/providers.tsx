@@ -6,17 +6,26 @@ import { WagmiProvider } from "wagmi";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { RainbowKitProvider, darkTheme } from "@rainbow-me/rainbowkit";
 import { getConfig } from "@/lib/wagmi";
+import { chainPollInterval } from "@/data/polling";
 import { DataLayerProvider } from "@/data/provider";
 import { WalletReadyProvider, createWalletReadyStore } from "@/lib/wallet-ready";
 
 export function Providers({ children }: { children: ReactNode }) {
   // Created lazily inside the component, never at module level.
   const [config] = useState(() => getConfig());
-  // Retries are off in Phase 1 so a stub read failure shows its error state at once.
+  // Retries stay off so a read failure shows its error state at once. Chain reads that another wallet can
+  // change poll every 4 s (data/polling.ts); stub reads never poll. Nothing keeps the previous key's data on
+  // screen, so after an account switch the new wallet sees a skeleton, never the old wallet's access.
   const [queryClient] = useState(
     () =>
       new QueryClient({
-        defaultOptions: { queries: { retry: false, refetchOnWindowFocus: false } },
+        defaultOptions: {
+          queries: {
+            retry: false,
+            refetchOnWindowFocus: false,
+            refetchInterval: (query) => chainPollInterval(query.queryKey),
+          },
+        },
       }),
   );
 
