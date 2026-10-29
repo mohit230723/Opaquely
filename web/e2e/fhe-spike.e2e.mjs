@@ -1,6 +1,7 @@
 // Phase 2 spike: the browser encrypts a value, the injected wallet signs a real tx against
 // `hardhat node` (31337), and Node decrypts the stored total to check it.
-// Skips (passes with a SKIP line) when no node answers on 127.0.0.1:8545.
+// Fails when no node answers on 127.0.0.1:8545, unless E2E_ALLOW_SKIP_FHE=1 (then it prints SKIP and
+// passes). run-all.mjs leaves this script out of an unfiltered run when no node is up.
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -25,8 +26,11 @@ export default async function fheSpike({ baseUrl, accounts, assert, waitForWalle
     body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "eth_chainId", params: [] }),
   }).then((r) => r.ok, () => false);
   if (!up) {
-    console.log("  SKIP fhe-spike: no hardhat node on " + RPC);
-    return;
+    if (process.env.E2E_ALLOW_SKIP_FHE === "1") {
+      console.log("  SKIP fhe-spike: no hardhat node on " + RPC);
+      return;
+    }
+    throw new Error("no hardhat node on " + RPC + " (run: node contracts/scripts/dev-node.mjs start)");
   }
   if (!fs.existsSync(artifactPath)) {
     throw new Error("FheSpike artifact missing: run npm --prefix contracts run compile");

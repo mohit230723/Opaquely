@@ -1,5 +1,7 @@
 // Headless Chrome e2e runner: starts `next start`, injects a test wallet, runs e2e/*.e2e.mjs.
 // Usage: node e2e/run-all.mjs [--port 3100] [script-name ...]
+// fhe-spike needs `hardhat node` on 127.0.0.1:8545. It runs when you name it (and then fails if no node
+// answers) or in an unfiltered run when a node is up; an unfiltered run with no node skips it.
 import { spawn } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
@@ -55,6 +57,15 @@ async function waitForServer(server, timeoutMs = 120_000) {
   throw new Error(`next start did not answer on ${baseUrl} within ${timeoutMs / 1000}s`);
 }
 
+const NODE_RPC = "http://127.0.0.1:8545";
+const nodeIsUp = () =>
+  fetch(NODE_RPC, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "eth_chainId", params: [] }),
+    signal: AbortSignal.timeout(2_000),
+  }).then((r) => r.ok, () => false);
+
 const isLocalHost = (url) => {
   try {
     const h = new URL(url).hostname;
@@ -94,6 +105,10 @@ async function main() {
     for (const file of files) {
       const name = file.replace(/\.e2e\.mjs$/, "");
       if (filters.length > 0 && !filters.includes(name)) continue;
+      if (name === "fhe-spike" && filters.length === 0 && !(await nodeIsUp())) {
+        console.log("SKIP fhe-spike (no node)");
+        continue;
+      }
 
       const startedAt = Date.now();
       const contexts = [];

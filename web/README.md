@@ -58,6 +58,12 @@ node e2e/run-all.mjs --port 3120 fhe-spike
 node ../contracts/scripts/dev-node.mjs stop
 ```
 
-Without a node on 127.0.0.1:8545 the fhe-spike script prints a SKIP line and passes. The script deploys FheSpike and prints its address in the "FHE SPIKE OK contract=..." line.
+The fhe-spike script needs the node. When to run it:
+
+- Named explicitly (`node e2e/run-all.mjs fhe-spike`): it runs, and it FAILS if nothing answers on 127.0.0.1:8545.
+- Unfiltered run (`node e2e/run-all.mjs`): it runs only when a node answers on 8545. With no node the runner prints `SKIP fhe-spike (no node)` and the Phase 1 scripts still decide `E2E OK`.
+- `E2E_ALLOW_SKIP_FHE=1` makes a named run skip (SKIP line, exit 0) instead of fail when there is no node. Leave it unset for a sign-off run.
+
+The script deploys FheSpike and prints its address in the "FHE SPIKE OK contract=..." line.
 
 Open `next dev` at http://localhost:PORT, not http://127.0.0.1:PORT. Next 16 blocks its dev resources for the 127.0.0.1 origin and the page never hydrates.
