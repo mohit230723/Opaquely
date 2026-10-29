@@ -18,6 +18,8 @@ export interface OcrProgress {
 
 let workerPromise: Promise<TesseractWorker> | null = null;
 let listener: ((p: OcrProgress) => void) | null = null;
+/** Id of the newest run: only that run may clear the listener, so an older one finishing cannot silence it. */
+let latestRun = 0;
 
 function getWorker(): Promise<TesseractWorker> {
   if (!workerPromise) {
@@ -52,6 +54,7 @@ export function prewarmOcr(): void {
 export async function terminateOcr(): Promise<void> {
   const current = workerPromise;
   workerPromise = null;
+  latestRun += 1;
   listener = null;
   if (current) await current.then((w) => w.terminate()).catch(() => undefined);
 }
@@ -83,12 +86,13 @@ export async function preprocessImage(url: string): Promise<HTMLCanvasElement> {
 
 /** Runs OCR on an image URL (a blob: URL or a same-origin sample) and returns the raw text. */
 export async function recognizeBill(url: string, onProgress: (p: OcrProgress) => void): Promise<string> {
+  const run = ++latestRun;
   listener = onProgress;
   try {
     const [worker, canvas] = await Promise.all([getWorker(), preprocessImage(url)]);
     const { data } = await worker.recognize(canvas);
     return data.text;
   } finally {
-    listener = null;
+    if (latestRun === run) listener = null;
   }
 }
