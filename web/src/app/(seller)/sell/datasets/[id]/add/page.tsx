@@ -11,6 +11,7 @@ import { TxStatus } from "@/components/TxStatus";
 import { LockIcon } from "@/components/icons";
 import { BillReviewForm } from "@/components/seller/BillReviewForm";
 import { Dropzone } from "@/components/seller/Dropzone";
+import { SentCheckPanel, type SentCheck } from "@/components/seller/SentCheckPanel";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { useAddBill, useDataset } from "@/data/hooks";
@@ -89,10 +90,12 @@ export default function AddBillPage() {
 
 function AddBillScreen({ datasetId, billCount }: { datasetId: string; billCount: number }) {
   const { state, run, reset } = useAddBill(datasetId);
+  const datasetQuery = useDataset(datasetId);
   const { chainId } = useAccount();
   const localMock = networkLabel(chainId) === "Local FHEVM mock";
   const [resetKey, setResetKey] = useState(0);
   const [last, setLast] = useState<{ draft: BillDraft; index: number } | null>(null);
+  const [sentCheck, setSentCheck] = useState<SentCheck | null>(null);
   const [prefill, setPrefill] = useState<{ n: number; fields: BillFormFields } | undefined>();
   const ocr = useBillOcr((p) =>
     setPrefill((prev) => ({
@@ -111,9 +114,38 @@ function AddBillScreen({ datasetId, billCount }: { datasetId: string; billCount:
     void run(input);
   }
 
+  // A failure that carries a hash happened after the transaction was sent, so it may well have been
+  // mined (a dropped connection while waiting, say). Sending the bill again then adds it twice, and a
+  // dataset cannot lose a bill. So there is no direct "Try again" for it: the seller checks first.
+  const sentButUnconfirmed = state.phase === "failed" && state.hash ? state.hash : null;
+  const check = sentButUnconfirmed && sentCheck?.hash === sentButUnconfirmed ? sentCheck : null;
+
+  async function checkStatus() {
+    if (!last || !sentButUnconfirmed) return;
+    const hash = sentButUnconfirmed;
+    setSentCheck({ hash, result: "checking" });
+    const read = await datasetQuery.refetch();
+    const fresh = read.data;
+    if (read.isError || !fresh) {
+      setSentCheck({ hash, result: "unknown" });
+      return;
+    }
+    // The dataset held `last.index` bills before this one. More than that means the transaction landed.
+    setSentCheck({ hash, result: fresh.billCount > last.index ? "added" : "not_added", billCount: fresh.billCount });
+  }
+
+  function sendAgain() {
+    if (!last || busy) return;
+    // The index is recomputed from the dataset as it is now, never reused from the failed attempt.
+    const input = { draft: last.draft, index: check?.billCount ?? billCount };
+    setLast(input);
+    void run(input);
+  }
+
   function addAnother() {
     reset();
     setLast(null);
+    setSentCheck(null);
     setPrefill(undefined);
     ocr.reset();
     setResetKey((k) => k + 1);
@@ -163,10 +195,24 @@ function AddBillScreen({ datasetId, billCount }: { datasetId: string; billCount:
           )}
           <TxStatus
             state={state}
-            onRetry={() => {
-              if (last) void run(last);
-            }}
+            onRetry={
+              sentButUnconfirmed
+                ? undefined
+                : () => {
+                    // Failed before anything was sent: safe to resend, with the index read fresh.
+                    if (last) void run({ draft: last.draft, index: billCount });
+                  }
+            }
           />
+          {sentButUnconfirmed ? (
+            <SentCheckPanel
+              check={check}
+              datasetId={datasetId}
+              onCheck={() => void checkStatus()}
+              onSendAgain={sendAgain}
+              onAddAnother={addAnother}
+            />
+          ) : null}
         </Card>
       </div>
     </div>
