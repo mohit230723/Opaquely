@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { NAV, activeIndex } from "./nav";
+import { MENU_ITEMS, NAV, SOCIAL_ITEMS, activeIndex } from "./nav";
 
 describe("NAV", () => {
   it("lists the four sections in header order", () => {
@@ -23,5 +23,22 @@ describe("activeIndex", () => {
   it("does not match a near-miss prefix", () => {
     expect(activeIndex("/marketplacex")).toBe(-1);
     expect(activeIndex("/uploads")).toBe(-1);
+  });
+});
+
+describe("MENU_ITEMS and SOCIAL_ITEMS", () => {
+  it("lists the six menu entries in order", () => {
+    expect(MENU_ITEMS.map((i) => i.label)).toEqual([
+      "Home",
+      "Upload",
+      "Marketplace",
+      "My Datasets",
+      "My Account",
+      "Transactions",
+    ]);
+    expect(MENU_ITEMS[5].href).toBe("/account#transactions");
+  });
+  it("links the GitHub repo", () => {
+    expect(SOCIAL_ITEMS).toEqual([{ label: "GitHub", href: "https://github.com/mohit230723/Opaquely" }]);
   });
 });

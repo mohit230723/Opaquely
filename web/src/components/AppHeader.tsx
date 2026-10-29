@@ -4,6 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { NetworkBadge } from "@/components/NetworkBadge";
+import { SiteMenu } from "@/components/nav/SiteMenu";
 import { SiteNav } from "@/components/nav/SiteNav";
 import { BRAND, WORDMARK_RATIO } from "@/lib/brand";
 
@@ -33,6 +34,8 @@ export function AppHeader() {
         </span>
         <ConnectButton showBalance={false} accountStatus={{ smallScreen: "avatar", largeScreen: "address" }} />
       </div>
+      {/* Fixed overlay; its Menu toggle is drawn in the 120px reserved at the right of the header. */}
+      <SiteMenu />
     </header>
   );
 }

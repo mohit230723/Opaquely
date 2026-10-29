@@ -15,3 +15,12 @@ export type NavItem = (typeof NAV)[number];
 export function activeIndex(path: string): number {
   return NAV.findIndex((item) => path === item.href || path.startsWith(item.href + "/"));
 }
+
+/** The header menu panel: Home, the four sections, and the transactions list on My Account. */
+export const MENU_ITEMS = [
+  { label: "Home", href: "/" },
+  ...NAV,
+  { label: "Transactions", href: "/account#transactions" },
+] as const;
+
+export const SOCIAL_ITEMS = [{ label: "GitHub", href: "https://github.com/mohit230723/Opaquely" }] as const;

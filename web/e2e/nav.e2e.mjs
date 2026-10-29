@@ -64,4 +64,40 @@ export default async function nav({ baseUrl, accounts, assert, waitForWallet, ne
     [...Object.keys(localStorage), ...Object.keys(sessionStorage)].filter((k) => k.toLowerCase().startsWith("opaquely")),
   );
   assert(ownKeys.length === 0, `no opaquely* storage key expected, got ${ownKeys.join(", ")}`);
+
+  // The StaggeredMenu on the right lists every section, moves client-side and closes on link click and Escape.
+  await menuChecks({ page, baseUrl, assert, waitForWallet, accounts });
+}
+
+async function menuChecks({ page, baseUrl, assert, waitForWallet, accounts }) {
+  await page.goto(baseUrl + "/marketplace");
+  await waitForWallet(page, accounts.buyer);
+  const panel = page.locator("#staggered-menu-panel");
+  assert((await panel.getAttribute("inert")) !== null, "the closed menu panel must be inert");
+  const toggle = page.getByRole("button", { name: "Open menu" });
+  await toggle.waitFor({ state: "visible", timeout: 25_000 });
+  await toggle.click();
+  for (const name of ["Home", "Upload", "Marketplace", "My Datasets", "My Account", "Transactions"]) {
+    await panel.getByRole("link", { name, exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+  }
+  await page.waitForFunction(() => document.activeElement && document.activeElement.textContent === "Home", null, {
+    timeout: 5_000,
+  });
+  const github = panel.getByRole("link", { name: "GitHub" });
+  assert((await github.getAttribute("target")) === "_blank", "GitHub link must open a new tab");
+  assert(((await github.getAttribute("rel")) ?? "").includes("noopener"), "GitHub link rel must include noopener");
+
+  await page.evaluate(() => {
+    window.__menuMarker = 1;
+  });
+  await panel.getByRole("link", { name: "My Datasets", exact: true }).click();
+  await page.waitForURL((u) => u.pathname === "/my-datasets", { timeout: 15_000 });
+  assert((await page.evaluate(() => window.__menuMarker)) === 1, "menu navigation must be client-side");
+  await page.getByRole("button", { name: "Open menu" }).waitFor({ state: "visible", timeout: 10_000 });
+
+  await page.getByRole("button", { name: "Open menu" }).click();
+  await page.getByRole("button", { name: "Close menu" }).waitFor({ state: "visible", timeout: 10_000 });
+  await page.keyboard.press("Escape");
+  await page.getByRole("button", { name: "Open menu" }).waitFor({ state: "visible", timeout: 10_000 });
+  assert((await panel.getAttribute("inert")) !== null, "the menu panel must be inert again after Escape");
 }
