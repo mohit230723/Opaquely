@@ -132,16 +132,20 @@ describe("Marketplace: buying, ACL and payments (MKT-07, MKT-09)", function () {
     await expect(ctx.market.connect(seller).withdraw()).to.be.revertedWithCustomError(ctx.market, "NothingToWithdraw"); // double withdraw
   });
 
-  it("a reentrant seller contract cannot drain other sellers' proceeds", async function () {
+  // The guard is what must stop these, not checks-effects-interactions: both re-entries would otherwise succeed
+  // or fail with a different error (withdraw: NothingToWithdraw, buyListing: a real purchase of the honest listing).
+  const GUARD_SELECTOR = ethers.id("ReentrancyGuardReentrantCall()").slice(0, 10);
+
+  /** Honest seller with one sale (PRICE pending), plus an attacker contract seller with one sale of its own. */
+  async function reentrancyScene() {
     const [honest, buyer1, buyer2] = await ethers.getSigners();
     const ctx = await deployAll(ethers);
     const attacker = await ethers.deployContract("ReentrantSeller", [ctx.marketAddress]);
     const attackerAddr = await attacker.getAddress();
 
-    // Honest seller: dataset + listing + one sale => PRICE pending.
     const hid = await seededDataset(ctx, honest, "honest", BILLS);
-    const hl = await listed(ctx, honest, hid);
-    await (await ctx.market.connect(buyer1).buyListing(hl, PRICE, { value: PRICE })).wait();
+    const honestListing = await listed(ctx, honest, hid);
+    await (await ctx.market.connect(buyer1).buyListing(honestListing, PRICE, { value: PRICE })).wait();
 
     // Attacker is a contract seller. It acts through exec(), and its input proofs are made for ITS address.
     const regIface = ctx.registry.interface;
@@ -163,18 +167,40 @@ describe("Marketplace: buying, ACL and payments (MKT-07, MKT-09)", function () {
       ).wait();
     }
     await (await attacker.exec(ctx.marketAddress, mktIface.encodeFunctionData("listDataset", [aid, "evil", "d", PRICE, 1]))).wait();
-    const al = await ctx.market.listingCount();
-    await (await ctx.market.connect(buyer2).buyListing(al, PRICE, { value: PRICE })).wait();
+    const attackerListing = await ctx.market.listingCount();
+    await (await ctx.market.connect(buyer2).buyListing(attackerListing, PRICE, { value: PRICE })).wait();
     expect(await ethers.provider.getBalance(ctx.marketAddress)).to.equal(2n * PRICE);
+    return { ctx, honest, attacker, attackerAddr, honestListing, mktIface };
+  }
+
+  it("a reentrant seller cannot drain other sellers' proceeds: re-entering withdraw() hits the guard", async function () {
+    const { ctx, honest, attacker, attackerAddr, mktIface } = await reentrancyScene();
 
     // Attacker withdraws; its receive() tries to re-enter withdraw().
     await (await attacker.exec(ctx.marketAddress, mktIface.encodeFunctionData("withdraw"))).wait();
     expect(await attacker.reentryAttempts()).to.equal(1n);
     expect(await attacker.reentrySucceeded()).to.equal(false);
+    // nonReentrant runs before the function body, so the guard error (not NothingToWithdraw) proves the guard fired.
+    expect(await attacker.lastReentryReturn()).to.equal(GUARD_SELECTOR);
     expect(await ethers.provider.getBalance(attackerAddr)).to.equal(PRICE); // got its own PRICE, once
     expect(await ethers.provider.getBalance(ctx.marketAddress)).to.equal(PRICE); // the honest seller's PRICE is intact
     expect(await ctx.market.pendingWithdrawals(honest.address)).to.equal(PRICE);
     await expect(ctx.market.connect(honest).withdraw()).to.changeEtherBalances(ethers, [honest, ctx.marketAddress], [PRICE, -PRICE]);
+  });
+
+  it("a reentrant seller cannot use the payout to buy a listing mid-withdraw: re-entering buyListing hits the guard", async function () {
+    const { ctx, honest, attacker, attackerAddr, honestListing, mktIface } = await reentrancyScene();
+
+    // Without the guard this re-entry would be a valid purchase of the honest listing funded by the payout.
+    await (await attacker.arm(mktIface.encodeFunctionData("buyListing", [honestListing, PRICE]), PRICE)).wait();
+    await (await attacker.exec(ctx.marketAddress, mktIface.encodeFunctionData("withdraw"))).wait();
+    expect(await attacker.reentryAttempts()).to.equal(1n);
+    expect(await attacker.reentrySucceeded()).to.equal(false);
+    expect(await attacker.lastReentryReturn()).to.equal(GUARD_SELECTOR);
+    expect(await ctx.market.purchased(honestListing, attackerAddr)).to.equal(false);
+    expect(await ctx.registry.hasAccess(1n, attackerAddr)).to.equal(false);
+    expect(await ethers.provider.getBalance(attackerAddr)).to.equal(PRICE); // payout kept, not spent
+    expect(await ctx.market.pendingWithdrawals(honest.address)).to.equal(PRICE);
   });
 });
 
