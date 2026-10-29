@@ -1,5 +1,5 @@
 // Cold-start rehearsal of the whole local demo. Run from anywhere:
-//   node scripts/demo-rehearse.mjs [--port N] [--skip-build] [--full]      (--help prints the flags)
+//   node scripts/demo-rehearse.mjs [--port N] [--skip-build] [--full] [--stale]      (--help prints the flags)
 // Plain Node ESM with only node: imports, so it needs no install. It never uses npm or a shell: every child
 // is started with process.execPath, so it behaves the same on Windows and Linux.
 //
@@ -7,6 +7,7 @@
 //   1 preflight   2 stop the node THIS tooling started   3 cold start   4 compile and deploy   5 verify the deploy
 //   6 build (or reuse of this script's own build with --skip-build)   7 golden path (demo-rehearsal e2e) on the clean chain
 //   8 regression: seller-ocr, seller-live and buyer-live, or the whole unfiltered e2e suite with --full
+//   9 (--stale only) restart the node WITHOUT a deploy and prove the stale-deployment banner
 // Always, at the end: stop the node this run started, restore a deployedAt-only change to the deployments files,
 // and restore web/next-env.d.ts when it was clean before the run.
 // Logs go to <repo>/.scratch/rehearsal-<timestamp>.log (git-ignored).
@@ -22,10 +23,11 @@ const scratch = path.join(root, ".scratch");
 const RPC = "http://127.0.0.1:8545";
 
 const USAGE = [
-  "usage: node scripts/demo-rehearse.mjs [--port N] [--skip-build] [--full]",
+  "usage: node scripts/demo-rehearse.mjs [--port N] [--skip-build] [--full] [--stale]",
   "  --port N       port for the test web server (default 3180)",
   "  --skip-build   reuse web/.next only if THIS script built it and it holds the deployed registry address",
   "  --full         after the golden path run the whole unfiltered e2e suite, not just the demo scripts",
+  "  --stale        also proves that banner on a restarted node: restart without a deploy, run stale-deployment",
   "  --help         print this text",
 ].join("\n");
 
@@ -34,6 +36,7 @@ const argv = process.argv.slice(2);
 let port = 3180;
 let skipBuild = false;
 let full = false;
+let stale = false;
 for (let i = 0; i < argv.length; i++) {
   if (argv[i] === "--help") {
     console.log(USAGE);
@@ -41,6 +44,7 @@ for (let i = 0; i < argv.length; i++) {
   } else if (argv[i] === "--port" && /^\d+$/.test(argv[i + 1] ?? "")) port = Number(argv[++i]);
   else if (argv[i] === "--skip-build") skipBuild = true;
   else if (argv[i] === "--full") full = true;
+  else if (argv[i] === "--stale") stale = true;
   else {
     console.log(USAGE);
     process.exit(1);
@@ -239,6 +243,24 @@ async function main() {
     const r = await runNode([path.join(webDir, "e2e", "run-all.mjs"), "--port", String(port), ...names], webDir);
     if (r.code !== 0 || !/^E2E OK/m.test(r.out)) throw new StepFailure(8, "regression", "the e2e regression run did not end with E2E OK");
   });
+
+  if (stale) {
+    await step(9, "stale deployment", async () => {
+      // A restarted node has no contracts. Deliberately NO deploy here.
+      const stop = await runNode([devNode, "stop"]);
+      if (stop.code !== 0) throw new StepFailure(9, "stale deployment", "could not stop the node before the restart");
+      startedNode = false;
+      const start = await runNode([devNode, "start"]);
+      if (start.code !== 0 || !start.out.includes("hardhat node up")) {
+        throw new StepFailure(9, "stale deployment", "the node did not restart (no 'hardhat node up' line)");
+      }
+      startedNode = true;
+      const r = await runNode([path.join(webDir, "e2e", "run-all.mjs"), "--port", String(port), "stale-deployment"], webDir);
+      if (r.code !== 0 || !r.out.includes("PASS stale-deployment")) {
+        throw new StepFailure(9, "stale deployment", "the stale-deployment e2e did not pass");
+      }
+    });
+  }
 }
 
 /** Restore the generated deployments files only when every changed line is a deployedAt line (T-06-03). */

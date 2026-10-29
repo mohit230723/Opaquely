@@ -3,6 +3,8 @@
 // fhe-spike, seller-live and buyer-live need `hardhat node` on 127.0.0.1:8545 (seller-live and buyer-live also
 // need the contracts deployed). Each runs when you name it (and then fails if no node answers) or in an
 // unfiltered run when a node is up; an unfiltered run with no node skips all three.
+// stale-deployment (Phase 6) needs a node WITHOUT the contracts and only runs when named; an unfiltered run
+// prints "SKIP stale-deployment (named runs only)". scripts/demo-rehearse.mjs --stale runs it on a restarted node.
 // demo-rehearsal (Phase 6) also needs the node and the contracts deployed, and it should run first on a freshly
 // deployed chain: scripts/demo-rehearse.mjs does that. It is delta-based, so it also passes on a used node.
 import { spawn } from "node:child_process";
@@ -16,7 +18,9 @@ const webDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const e2eDir = path.join(webDir, "e2e");
 
 // Scripts that need `hardhat node` on 127.0.0.1:8545. An unfiltered run skips them when no node answers.
-const NEEDS_NODE = new Set(["fhe-spike", "seller-live", "buyer-live", "demo-rehearsal"]);
+const NEEDS_NODE = new Set(["fhe-spike", "seller-live", "buyer-live", "demo-rehearsal", "stale-deployment"]);
+// Scripts that run only when named, because they need a node without the contracts (they fail on a deployed node).
+const ONLY_WHEN_NAMED = new Set(["stale-deployment"]);
 
 // ---- args ----
 const argv = process.argv.slice(2);
@@ -115,6 +119,10 @@ async function main() {
     for (const file of files) {
       const name = file.replace(/\.e2e\.mjs$/, "");
       if (filters.length > 0 && !filters.includes(name)) continue;
+      if (ONLY_WHEN_NAMED.has(name) && filters.length === 0) {
+        console.log(`SKIP ${name} (named runs only)`);
+        continue;
+      }
       if (NEEDS_NODE.has(name) && filters.length === 0 && !(await nodeIsUp())) {
         console.log(`SKIP ${name} (no node)`);
         continue;

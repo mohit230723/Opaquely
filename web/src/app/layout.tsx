@@ -5,6 +5,7 @@ import { GeistMono } from "geist/font/mono";
 import { Providers } from "./providers";
 import { AppFooter } from "@/components/AppFooter";
 import { AppHeader } from "@/components/AppHeader";
+import { DeploymentGuard } from "@/components/DeploymentGuard";
 import { NetworkGate } from "@/components/NetworkGate";
 import "./globals.css";
 
@@ -26,9 +27,11 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         <Providers>
           <AppHeader />
           <NetworkGate>
-            <main id="main" tabIndex={-1}>
-              {children}
-            </main>
+            <DeploymentGuard>
+              <main id="main" tabIndex={-1}>
+                {children}
+              </main>
+            </DeploymentGuard>
           </NetworkGate>
           <AppFooter />
         </Providers>
