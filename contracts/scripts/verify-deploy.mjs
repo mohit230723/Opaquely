@@ -6,6 +6,9 @@
 //
 // Usage: node scripts/verify-deploy.mjs [--file <deployments.json>] [--keep <chainKey>]... [--differs-from <address>]
 //   RPC_URL  default http://127.0.0.1:8545
+//   DEPLOYER_PRIVATE_KEY  optional. Only its address is used, as the sender of the eth_call in the error-decode check,
+//            for nodes with no unlocked accounts (public RPCs such as Sepolia answer eth_accounts with [] or an error).
+//            Without it the decode check is skipped with a note. Nothing is signed or sent.
 //   --file   default ../web/src/contracts/deployments.json (relative to this script); a given path resolves from the cwd
 //   --keep   a chain key that must still be in the file (repeatable); proves a redeploy merged instead of overwriting
 //   --differs-from  an earlier Marketplace address; the file's Marketplace address must differ (proves a redeploy happened)
@@ -13,6 +16,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createPublicClient, http, getAddress } from "viem";
+import { privateKeyToAccount } from "viem/accounts";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const rpcUrl = process.env.RPC_URL ?? "http://127.0.0.1:8545";
@@ -121,23 +125,45 @@ async function main() {
     if (!marketFns.includes(n)) throw new Error(`Marketplace ABI lacks function ${n}`);
   }
 
-  // f. a registry error bubbling through the Marketplace decodes by name (eth_call only, no state change)
-  const accounts = await client.request({ method: "eth_accounts" });
-  if (!accounts || accounts.length === 0) throw new Error("the node has no unlocked account for the decode check");
-  let decoded;
+  // f. a registry error bubbling through the Marketplace decodes by name (eth_call only, no state change).
+  // The sender comes from eth_accounts when the node has unlocked accounts (local node), otherwise from
+  // DEPLOYER_PRIVATE_KEY (address only). With neither, this one check is skipped and the output says so.
+  let sender;
   try {
-    await client.simulateContract({
-      address: market.address,
-      abi: market.abi,
-      functionName: "listDataset",
-      args: [999999999n, "verify", "", 1n, 0],
-      account: getAddress(accounts[0]),
-    });
-  } catch (err) {
-    decoded = findErrorName(err);
-    if (decoded !== "DatasetNotFound") throw new Error(`listDataset on a missing dataset decoded as ${decoded ?? "no error name"}, expected DatasetNotFound`);
+    const accounts = await client.request({ method: "eth_accounts" });
+    if (Array.isArray(accounts) && accounts.length > 0) sender = getAddress(accounts[0]);
+  } catch {
+    // public RPCs may reject eth_accounts outright; treat it like an empty list
   }
-  if (decoded === undefined) throw new Error("listDataset on a missing dataset did not revert");
+  if (!sender && process.env.DEPLOYER_PRIVATE_KEY) {
+    const raw = process.env.DEPLOYER_PRIVATE_KEY.trim();
+    try {
+      sender = privateKeyToAccount(raw.startsWith("0x") ? raw : `0x${raw}`).address;
+    } catch {
+      throw new Error("DEPLOYER_PRIVATE_KEY is not a valid 32-byte hex private key");
+    }
+  }
+  let decodeNote = "";
+  if (!sender) {
+    const why = "error-decode check SKIPPED: the node has no unlocked account and DEPLOYER_PRIVATE_KEY is not set";
+    decodeNote = ` (${why})`;
+    console.log("note: " + why);
+  } else {
+    let decoded;
+    try {
+      await client.simulateContract({
+        address: market.address,
+        abi: market.abi,
+        functionName: "listDataset",
+        args: [999999999n, "verify", "", 1n, 0],
+        account: sender,
+      });
+    } catch (err) {
+      decoded = findErrorName(err);
+      if (decoded !== "DatasetNotFound") throw new Error(`listDataset on a missing dataset decoded as ${decoded ?? "no error name"}, expected DatasetNotFound`);
+    }
+    if (decoded === undefined) throw new Error("listDataset on a missing dataset did not revert");
+  }
 
   // g. the sibling TypeScript file
   const tsFile = path.join(path.dirname(file), "deployments.ts");
@@ -164,7 +190,7 @@ async function main() {
   }
 
   // j.
-  console.log(`DEPLOY VERIFIED chain=${key} registry=${registry.address} market=${market.address} deployBlock=${entry.deployBlock}`);
+  console.log(`DEPLOY VERIFIED chain=${key} registry=${registry.address} market=${market.address} deployBlock=${entry.deployBlock}${decodeNote}`);
 }
 
 try {

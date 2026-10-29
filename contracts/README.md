@@ -84,6 +84,7 @@ npm run node:stop
 - On a fresh node one deploy always gives 0x5FbDB2315678afecb367f032d93F642f64180aa3 (DatasetRegistry) and 0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512 (Marketplace).
 - A redeploy on a running node writes new addresses for that chain and keeps the other chain keys.
 - Environment: `RPC_URL` (default http://127.0.0.1:8545), `DEPLOYER_PRIVATE_KEY` (environment only, never committed or written to any file; needed for a public RPC such as Sepolia in Phase 6), `ANOMALY_THRESHOLD_CENTS`. The flag `--out <dir>` changes the output directory.
+- `verify:deploy` needs no unlocked account. It uses `eth_accounts` when the node has one (local node), otherwise the address of `DEPLOYER_PRIVATE_KEY` (only the address is used, as the sender of an `eth_call`; nothing is signed). With neither, it skips only the error-decode check and prints a note, so it also runs against public RPCs such as Sepolia.
 - The registry's errors are merged into the exported Marketplace ABI, so viem decodes errors that bubble through `listDataset` by name.
 
 ### Custom errors (for Phase 5's `REVERT_REASONS`)
