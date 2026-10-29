@@ -32,7 +32,40 @@ async function rpc(method, params = []) {
 const chainId = () => rpc("eth_chainId");
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+const isPid = (v) => /^[1-9]\d*$/.test(String(v));
+
+// Command line of a live process, or null when no such process exists (or it cannot be read).
+function commandLineOf(pid) {
+  if (!isPid(pid)) return null;
+  try {
+    if (process.platform === "win32") {
+      const out = execFileSync(
+        "powershell.exe",
+        [
+          "-NoProfile",
+          "-NonInteractive",
+          "-Command",
+          `(Get-CimInstance Win32_Process -Filter "ProcessId=${Number(pid)}").CommandLine`,
+        ],
+        { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], windowsHide: true },
+      ).trim();
+      return out || null;
+    }
+    return execFileSync("ps", ["-p", String(pid), "-o", "command="], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim() || null;
+  } catch {
+    return null;
+  }
+}
+
+// True only when the pid is alive and its command line is our `hardhat node` launch.
+const isOurNode = (pid) => {
+  const cmd = commandLineOf(pid);
+  // Our launch is `node .../hardhat/dist/src/cli.js node --hostname 127.0.0.1` (either slash style).
+  return cmd !== null && /hardhat[\\/]dist[\\/]src[\\/]cli\.js"?\s+node\b/i.test(cmd);
+};
+
 function killTree(pid) {
+  if (!isPid(pid)) return; // never hand a corrupt value to taskkill or process.kill
   if (process.platform === "win32") {
     try {
       execFileSync("taskkill", ["/PID", String(pid), "/T", "/F"], { stdio: "ignore" });
@@ -42,7 +75,7 @@ function killTree(pid) {
   } else {
     try {
       // the detached child leads its own process group
-      process.kill(-pid, "SIGTERM");
+      process.kill(-Number(pid), "SIGTERM");
     } catch {
       // already gone
     }
@@ -94,6 +127,21 @@ async function stop() {
     return 0;
   }
   const pid = fs.readFileSync(pidFile, "utf8").trim();
+  if (!isPid(pid)) {
+    fs.rmSync(pidFile, { force: true });
+    console.log("pid file was corrupt (" + JSON.stringify(pid.slice(0, 20)) + "); removed it, killed nothing");
+    return (await chainId()) ? 1 : 0;
+  }
+  // The pid may have been reused by an unrelated process after a crash or reboot: only kill our node.
+  if (!isOurNode(pid)) {
+    fs.rmSync(pidFile, { force: true });
+    console.log("pid " + pid + " is not a running hardhat node (stale pid file); removed it, killed nothing");
+    if (await chainId()) {
+      console.log("a node still answers on " + RPC + " but this script did not start it");
+      return 1;
+    }
+    return 0;
+  }
   killTree(pid);
   fs.rmSync(pidFile, { force: true });
   for (let i = 0; i < 15; i++) {
