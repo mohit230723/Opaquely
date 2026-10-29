@@ -177,3 +177,50 @@ describe("Marketplace: buying, ACL and payments (MKT-07, MKT-09)", function () {
     await expect(ctx.market.connect(honest).withdraw()).to.changeEtherBalances(ethers, [honest, ctx.marketAddress], [PRICE, -PRICE]);
   });
 });
+
+describe("Marketplace: reads and events for the DataLayer (no indexer)", function () {
+  it("pages listings newest first, and serves seller, buyer and purchase views", async function () {
+    const [s1, s2, buyer] = await ethers.getSigners();
+    const ctx = await deployAll(ethers);
+    const d1 = await seededDataset(ctx, s1, "one", BILLS);
+    const l1 = await listed(ctx, s1, d1, PRICE);
+    const d2 = await seededDataset(ctx, s2, "two", BILLS);
+    const l2 = await listed(ctx, s2, d2, 2n * PRICE);
+
+    expect(await ctx.market.listingCount()).to.equal(2n);
+    const page = await ctx.market.getListings(0, 10);
+    expect(page.map((r: any) => r.id)).to.deep.equal([l2, l1]);
+    expect((await ctx.market.getListings(1, 10)).map((r: any) => r.id)).to.deep.equal([l1]);
+    expect(await ctx.market.getListings(5, 10)).to.have.length(0);
+    expect(page[0].recordCount).to.equal(3n);
+    expect(page[0].categoryMask).to.equal(7n);
+    expect((await ctx.market.listingsBySeller(s1.address)).map((r: any) => r.id)).to.deep.equal([l1]);
+    expect(await ctx.market.listingOfDataset(d1)).to.equal(l1);
+    expect((await ctx.registry.datasetsByOwner(s1.address)).map((r: any) => [r.id, r.name, r.recordCount, r.isSealed])).to.deep.equal([[d1, "one", 3n, true]]);
+
+    await (await ctx.market.connect(buyer).buyListing(l1, PRICE, { value: PRICE })).wait();
+    const purchases = await ctx.market.purchasesByBuyer(buyer.address);
+    expect(purchases).to.have.length(1);
+    expect(purchases[0].listingId).to.equal(l1);
+    expect(purchases[0].priceWei).to.equal(PRICE);
+  });
+
+  it("emits Listed, Purchased and Withdrawn with indexed actors, usable as the activity feed", async function () {
+    const [seller, buyer] = await ethers.getSigners();
+    const ctx = await deployAll(ethers);
+    const id = await seededDataset(ctx, seller, "full", BILLS);
+    const listingId = await listed(ctx, seller, id);
+    await (await ctx.market.connect(buyer).buyListing(listingId, PRICE, { value: PRICE })).wait();
+    await (await ctx.market.connect(seller).withdraw()).wait();
+
+    const listedEv = await ctx.market.queryFilter(ctx.market.filters.Listed());
+    const boughtEv = await ctx.market.queryFilter(ctx.market.filters.Purchased(null, buyer.address));
+    const withdrawnEv = await ctx.market.queryFilter(ctx.market.filters.Withdrawn(seller.address));
+    expect(listedEv[0].args.title).to.equal("Household Q3");
+    expect(boughtEv[0].args.buyer).to.equal(buyer.address);
+    expect(boughtEv[0].args.seller).to.equal(seller.address);
+    expect(withdrawnEv[0].args.amountWei).to.equal(PRICE);
+    const created = await ctx.registry.queryFilter(ctx.registry.filters.DatasetCreated(null, seller.address));
+    expect(created[0].args.datasetId).to.equal(id);
+  });
+});
