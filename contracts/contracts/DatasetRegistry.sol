@@ -3,7 +3,6 @@ pragma solidity ^0.8.24;
 
 import {
     FHE,
-    ebool,
     euint8,
     euint32,
     euint64,
