@@ -19,7 +19,7 @@ export function ListingCard({ listing, viewer }: { listing: Listing; viewer?: st
 
   return (
     <Link
-      href={`/buy/${listing.id}`}
+      href={`/marketplace/${listing.id}`}
       className="flex h-full flex-col gap-3 rounded-xl border border-border bg-surface p-4 transition-colors duration-150 hover:border-border-strong sm:p-6"
     >
       <span className="line-clamp-2 text-base font-semibold wrap-break-word">{listing.title}</span>

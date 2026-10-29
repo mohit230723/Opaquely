@@ -112,7 +112,7 @@ export default function ListingDetailPage() {
       {(data) =>
         data === null ? (
           <PageShell title="Dataset">
-            <EmptyState heading="Listing not found" action={{ label: "Browse datasets", href: "/buy" }}>
+            <EmptyState heading="Listing not found" action={{ label: "Browse marketplace", href: "/marketplace" }}>
               It may have been removed. Browse the available datasets.
             </EmptyState>
           </PageShell>
