@@ -95,6 +95,10 @@ export default async function demoRehearsal({ baseUrl, accounts, assert, waitFor
       { timeout },
     );
   const audit = createPrivacyAudit({ baseUrl, rpcUrl: RPC, markers: MARKERS });
+  /** On a deployed node the stale-deployment banner must be absent (T-06-14); the guard has read its code by now. */
+  const assertNoStaleBanner = async (page, where) => {
+    assert((await page.getByText("The contracts are not on this chain").count()) === 0, `${where}: no stale-deployment banner on a deployed node`);
+  };
   /** The header badge, its tooltip and the footer all say the local chain is a mock (T-06-05). */
   const assertHonest = async (page, where) => {
     const badge = page.getByTestId("network-badge");
@@ -173,6 +177,7 @@ export default async function demoRehearsal({ baseUrl, accounts, assert, waitFor
   await S.getByText("Withdrawable balance", { exact: true }).waitFor(T);
   await statWait(S, "Purchases of your listings", String(statsBefore[1]));
   await assertHonest(S, "seller /sell");
+  await assertNoStaleBanner(S, "seller /sell");
 
   // ---- (f) buyer page B: find, buy, access ----
   const B = await newPage({ account: accounts.buyer, roles: { [accounts.buyer]: "buyer" }, rpcUrl: RPC, data: "chain" });
@@ -182,6 +187,7 @@ export default async function demoRehearsal({ baseUrl, accounts, assert, waitFor
   const card = B.getByRole("link", { name: "Rehearsal market " + tag });
   await card.waitFor(T);
   await assertHonest(B, "buyer /buy");
+  await assertNoStaleBanner(B, "buyer /buy");
   await audit.snapshotBody(B, "buyer on /buy");
   const cardText = await card.innerText();
   for (const s of ["0.05 ETH", "3 bills", "Utilities", "Groceries/Food", "Medical"]) {
@@ -242,6 +248,6 @@ export default async function demoRehearsal({ baseUrl, accounts, assert, waitFor
   const { requests, origins } = await audit.assertClean();
 
   console.log(
-    `  DEMO PATH OK dataset=${datasetId} listing=${listingId} mask=7 ocr=3 buy=${buyHash.slice(0, 10)} withdrawn=${pending} audit=clean requests=${requests} origins=${origins.join(",")}`,
+    `  DEMO PATH OK dataset=${datasetId} listing=${listingId} mask=7 ocr=3 buy=${buyHash.slice(0, 10)} withdrawn=${pending} audit=clean stale=none requests=${requests} origins=${origins.join(",")}`,
   );
 }

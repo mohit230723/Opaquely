@@ -151,6 +151,8 @@ node contracts/scripts/dev-node.mjs stop
 
 Then restore the `deployedAt`-only change with `git checkout -- web/src/contracts/deployments.json web/src/contracts/deployments.ts`. `buyer-live` drives five browser contexts (buyer, a stale tab of the buyer, Hardhat #2 as an outsider, the seller with a buyer role, and the seller's dashboard) and needs a fresh node with the contracts deployed. An unfiltered run with no node prints `SKIP buyer-live (no node)`, next to the fhe-spike and seller-live skips.
 
-### Known limits for Phase 6
+### Phase 6 additions
 
-After a node restart, redeploy: the app does not detect an address that has no code. On Sepolia, a read right after a receipt may need pinning to the receipt block, and public RPCs cap the block range of `eth_getLogs`, so the activity timeline will need chunked reads.
+A stale-deployment banner (`src/components/DeploymentGuard.tsx`, text in `src/lib/deployment.ts`) says "The contracts are not on this chain" and makes the page inert when the committed addresses have no code, which is what a node restarted without a deploy looks like. It reads the code once per page load and shows nothing while a read is pending or failed. Off the local chain, event reads are chunked and a receipt waits for the RPC head (`src/data/live/logs.ts`, `waitForHead`; window from `NEXT_PUBLIC_LOG_CHUNK_BLOCKS`), and Sepolia reads poll every 12 s (`src/data/polling.ts`). The whole demo is proven by one command at the repo root, `node scripts/demo-rehearse.mjs` (add `--full --stale` for the whole suite and the banner; see `../README.md`).
+
+One known limit remains: Sepolia itself is unproven until the owner runs the root README runbook (LAND-03 pending).

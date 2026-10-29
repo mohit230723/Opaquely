@@ -30,6 +30,7 @@ Layout:
 
    - `--skip-build` reuses the production build, but only a build that the rehearsal itself made and that contains the freshly deployed contract address. Any other build is rebuilt, and the reason is printed.
    - `--full` runs the whole end-to-end suite after the golden path, not just the demo scripts.
+   - `--stale` also proves that banner on a restarted node: it restarts the node without a deploy and runs the opt-in `stale-deployment` script, which is skipped in every other run.
    - `--port N` picks the port for the test web server (default 3180).
 
    With npm, put the flags after `--`, for example `npm --prefix web run demo:rehearse -- --skip-build`.
@@ -56,7 +57,7 @@ Layout:
    3. Import Hardhat account #0 in the seller profile and account #1 in the buyer profile. `hardhat node` prints the private keys. They are public test keys: never fund them on a real chain.
    4. Open the app in each profile and choose the role (seller or buyer) in the app.
 
-   **After EVERY node restart, in both profiles: MetaMask, Settings, Advanced, "Clear activity tab data". Then redeploy and reload the app.** Without it MetaMask keeps the old nonces and every transaction fails. If a red banner says the contracts are not on this chain, the node was restarted without a redeploy.
+   **After EVERY node restart, in both profiles: MetaMask, Settings, Advanced, "Clear activity tab data". Then redeploy and reload the app.** Without it MetaMask keeps the old nonces and every transaction fails. If the red banner "The contracts are not on this chain" appears, the node was restarted without a deploy: run `npm --prefix contracts run deploy` and reload.
 
 5. **What the local mock does and does not hide.** The local chain runs the FHEVM mock (`cleartext()`). The node sees the amount, date and category in cleartext (the amount is in the `addRecord` calldata). The bill image, the OCR text and the vendor never leave the browser. This is **not real FHE**, so never enter a real bill: use the sample bills or made-up values. Real FHE is the Sepolia path.
 
@@ -99,5 +100,7 @@ This is ROADMAP criterion 3 and LAND-03. The code side is built and tested, but 
 8. **Audit the network.** In DevTools, record the relayer and key-download hosts, pass them as `extraAllowedOrigins` to `createPrivacyAudit` in `web/e2e/helpers/privacy-audit.mjs`, and confirm that no image, OCR text or vendor appears in any request, console line, storage or IndexedDB.
 9. **If the worker or WASM fails** (a console warning or `EncryptOffloadUnavailableError`): change the Sepolia branch in `web/src/lib/zama.ts` to `web({ offloadEncrypt: false })`. If the build itself fails, use `next build --webpack` and `next dev --webpack`, and as a last resort `next@15.5.28`.
 10. **Return to local.** Unset the flag and rebuild. The Sepolia entry is inert without the flag. The rehearsal (`npm --prefix web run demo:rehearse`) always builds with the flag off.
+
+**Public RPC behaviour.** Off the local chain, event reads (the activity timeline and purchases) are chunked into block windows (`NEXT_PUBLIC_LOG_CHUNK_BLOCKS`, default 2000, clamped to 10..50000) that halve when a provider rejects the range. Sepolia reads poll every 12 s. After a transaction the app waits up to 30 s for the RPC to reach the receipt block, and never reports a confirmed transaction as failed. The stale-deployment banner also works on Sepolia.
 
 **Keys.** `DEPLOYER_PRIVATE_KEY` lives in the shell environment only. It is never written to a file, never committed, never put in a `NEXT_PUBLIC_` variable, and never printed by the deploy script.
