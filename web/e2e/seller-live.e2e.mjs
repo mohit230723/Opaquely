@@ -1,9 +1,10 @@
 // Phase 4 proof (tracer): the seller pipeline against a REAL hardhat node with the contracts deployed
 // (node contracts/scripts/dev-node.mjs start; npm --prefix contracts run deploy).
-// Create dataset -> under-filled listing is blocked -> three bills typed by hand, each encrypted in the
-// browser and added in one wallet-signed tx -> chain-vs-you panel -> list -> sealed. Then assert on chain
-// with viem and an SDK decrypt, and check that no plaintext left the browser. OCR arrives in Plans
-// 04-02 and 04-03, which switch two of these bills to the sample buttons.
+// Create dataset -> under-filled listing is blocked -> two bills read by browser OCR from the bundled
+// sample photos and one typed by hand, each encrypted in the browser and added in one wallet-signed tx
+// -> chain-vs-you panel -> list -> sealed. Then assert on chain with viem and an SDK decrypt, and audit
+// everything that left the page (image bytes, OCR-only text, vendors, amount text, POST targets, CDN
+// attempts, storage, IndexedDB).
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -28,6 +29,13 @@ const PLAINTEXT_MARKERS = [
   "3,322.40",
   "2,500.00",
   "iVBORw0KGgo",
+  // OCR-only text: the receipt lines the form never shows (RESEARCH Pitfall 8 / T-04-14)
+  "GSTIN 27ABCDE1234F1Z5",
+  "CASH TENDERED",
+  "Consumer No",
+  "1002938475",
+  "Plot 14, MG Road",
+  "Thank you, visit again",
 ];
 
 export default async function sellerLive({ baseUrl, accounts, assert, waitForWallet, newPage }) {
@@ -79,6 +87,8 @@ export default async function sellerLive({ baseUrl, accounts, assert, waitForWal
   await page.goto(baseUrl + "/sell/datasets/" + datasetId + "/add");
   await waitForWallet(page, accounts.seller);
   await page.getByRole("heading", { name: "Add a bill" }).waitFor(T);
+  // The banner is honest about the local mock: the node sees amount, date and category in cleartext.
+  await page.getByText("Local FHEVM mock: the image and the vendor stay in this browser").waitFor(T);
 
   async function addCurrentBill(expectCount) {
     await page.getByRole("button", { name: "Add bill to dataset" }).click();
@@ -86,23 +96,36 @@ export default async function sellerLive({ baseUrl, accounts, assert, waitForWal
     await page.getByText(`Bill added. This dataset now has ${expectCount} bill`).waitFor(T);
   }
 
-  // ---- bill 1: typed by hand ----
-  await page.getByLabel("Vendor (optional)").fill("SHREE GANESH SUPER MART");
-  await page.getByLabel("Total amount").fill("1,507.80");
-  await page.getByLabel("Date").fill("2026-10-18");
-  await page.getByRole("radio", { name: "Groceries/Food" }).click();
+  // ---- bill 1: OCR from the Grocery sample (SELL-02, SELL-03) ----
+  await page.getByRole("button", { name: "Grocery" }).click();
+  await page.getByTestId("ocr-status").filter({ hasText: "Read the bill" }).waitFor({ timeout: 30_000 });
+  assert((await page.getByLabel("Vendor (optional)").inputValue()) === "SHREE GANESH SUPER MART", "grocery vendor prefill");
+  assert((await page.getByLabel("Total amount").inputValue()) === "1507.80", "grocery amount prefill");
+  assert((await page.getByLabel("Date").inputValue()) === "2026-10-18", "grocery date prefill");
+  assert(
+    (await page.getByRole("radio", { name: "Groceries/Food" }).getAttribute("aria-checked")) === "true",
+    "grocery category prefill",
+  );
   await addCurrentBill(1);
   await page.getByRole("button", { name: "Add another bill" }).click();
 
-  // ---- bill 2: typed by hand ----
-  await page.getByLabel("Vendor (optional)").fill("Bright Power Distribution Co. Ltd.");
-  await page.getByLabel("Total amount").fill("3,322.40");
-  await page.getByLabel("Date").fill("2026-10-12");
-  await page.getByRole("radio", { name: "Utilities" }).click();
+  // ---- bill 2: OCR from the Electricity sample ----
+  await page.getByRole("button", { name: "Electricity" }).click();
+  await page.getByTestId("ocr-status").filter({ hasText: "Read the bill" }).waitFor({ timeout: 30_000 });
+  await page.waitForFunction(() => document.querySelector('input[name="amount"]')?.value === "3322.40", null, T);
+  assert(
+    (await page.getByLabel("Vendor (optional)").inputValue()) === "Bright Power Distribution Co. Ltd.",
+    "electricity vendor prefill",
+  );
+  assert((await page.getByLabel("Date").inputValue()) === "2026-10-12", "electricity date prefill");
+  assert(
+    (await page.getByRole("radio", { name: "Utilities" }).getAttribute("aria-checked")) === "true",
+    "electricity category prefill",
+  );
   await addCurrentBill(2);
   await page.getByRole("button", { name: "Add another bill" }).click();
 
-  // ---- bill 3: typed by hand ----
+  // ---- bill 3: typed by hand (OCR only pre-fills, so manual entry always works: SELL-05) ----
   await page.getByLabel("Vendor (optional)").fill("Corner Kirana");
   await page.getByLabel("Total amount").fill("2,500.00");
   await page.getByLabel("Date").fill("2026-10-20");
@@ -117,7 +140,10 @@ export default async function sellerLive({ baseUrl, accounts, assert, waitForWal
   // The panel shows what was typed this session beside the real on-chain handles.
   const panel = await page.locator("main").innerText();
   assert(
-    panel.includes("SHREE GANESH SUPER MART") && panel.includes("1,507.80") && panel.includes("Corner Kirana"),
+    panel.includes("SHREE GANESH SUPER MART") &&
+      panel.includes("1,507.80") &&
+      panel.includes("Bright Power") &&
+      panel.includes("Corner Kirana"),
     "panel must show the session values",
   );
   const handles = await page
@@ -197,6 +223,12 @@ export default async function sellerLive({ baseUrl, accounts, assert, waitForWal
   assert(leaked.length === 0, "plaintext marker in an outgoing request: " + leaked.map((l) => l.slice(0, 160)).join(" | "));
   const logged = consoleLines.filter((l) => PLAINTEXT_MARKERS.some((m) => l.includes(m)));
   assert(logged.length === 0, "plaintext marker in the console: " + logged.join(" | "));
+  // OCR assets are same-origin and never fetched from a CDN (the runner would abort a CDN request anyway).
+  const tess = outgoing.map((o) => o.split(" ")[0]).filter((u) => u.includes("/tesseract/"));
+  assert(tess.some((u) => u.endsWith("/tesseract/worker.min.js")), "worker.min.js must load from /tesseract");
+  assert(tess.some((u) => /-lstm\.wasm\.js$/.test(u)), "an lstm core must load from /tesseract");
+  assert(tess.some((u) => u.endsWith("/tesseract/lang/eng.traineddata.gz")), "eng model must load from /tesseract/lang");
+  assert(!outgoing.some((o) => /jsdelivr|unpkg|cdn\./.test(o.split(" ")[0])), "no CDN request may be attempted");
   const keys = await page.evaluate(() => [...Object.keys(localStorage), ...Object.keys(sessionStorage)]);
   assert(
     keys.every((k) => k.startsWith("opaquely:role:") || /^(wagmi|rk-|@appkit|base-acc-sdk|WALLETCONNECT|wc@)/i.test(k)),
@@ -204,5 +236,5 @@ export default async function sellerLive({ baseUrl, accounts, assert, waitForWal
   );
   const dbs = await page.evaluate(async () => (await indexedDB.databases()).map((d) => d.name));
   assert(!dbs.includes("keyval-store"), "unexpected IndexedDB: " + dbs.join(","));
-  console.log("  LIVE SELLER OK dataset=" + datasetId + " listing=" + listingId + " mask=" + listing.categoryMask + " rpc=" + [...rpcMethods].sort().join(","));
+  console.log("  LIVE SELLER OK dataset=" + datasetId + " listing=" + listingId + " mask=" + listing.categoryMask + " ocr=2 rpc=" + [...rpcMethods].sort().join(","));
 }
