@@ -49,6 +49,11 @@ export default async function fheSpike({ baseUrl, accounts, assert, waitForWalle
     await page.getByTestId("status").filter({ hasText: "failed: Enter a whole number" }).waitFor({ timeout: 5_000 });
     const text = (await page.getByTestId("status").textContent()) ?? "";
     assert(text.startsWith("failed: Enter a whole number"), `expected a whole-number refusal for ${bad}, got ${text}`);
+    // Reload so the next case starts from "idle" and cannot pass on this case's leftover status text.
+    await page.reload();
+    await waitForWallet(page, accounts.seller);
+    const fresh = (await page.getByTestId("status").textContent()) ?? "";
+    assert(fresh === "idle", `expected status to reset to idle after reload, got ${fresh}`);
   }
 
   await page.getByLabel("Amount").fill("4242");
