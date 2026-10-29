@@ -18,7 +18,9 @@ function stepOf(state: Exclude<TxState, { phase: "idle" }>): { current: number; 
     case "confirmed":
       return { current: 3, last: "Confirmed" };
     case "failed":
-      return { current: 3, last: "Failed" };
+      // A failure with a hash happened after submission; without one it happened before signing,
+      // so the stepper must not claim "Awaiting signature" or "Pending" completed.
+      return state.hash ? { current: 3, last: "Failed" } : { current: 1, last: "Confirmed" };
   }
 }
 

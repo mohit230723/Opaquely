@@ -47,6 +47,28 @@ describe("TxStatus", () => {
     expect(renderToStaticMarkup(<TxStatus state={state} />)).not.toContain("Try again");
   });
 
+  it("a failure before signing marks step 1 failed and leaves the later steps untouched", () => {
+    const html = renderToStaticMarkup(
+      <TxStatus state={{ phase: "failed", run: 1, reason: "You rejected the request.", code: "user_rejected" }} />,
+    );
+    expect(html).toContain("Step 1 of 3");
+    expect(html).not.toContain("Step 3 of 3");
+    // Only the first step shows the failed state; no step is rendered as done.
+    expect(html.match(/border-danger bg-danger/g)).toHaveLength(1);
+    expect(html).not.toContain("border-accent-bright bg-accent-bright");
+    expect(html).toContain('aria-current="step"');
+    expect(html).toContain("Confirmed");
+  });
+
+  it("a failure after submission keeps steps 1 and 2 done and fails step 3", () => {
+    const html = renderToStaticMarkup(
+      <TxStatus state={{ phase: "failed", run: 1, hash: HASH, reason: "Transaction reverted.", code: "reverted" }} />,
+    );
+    expect(html).toContain("Step 3 of 3");
+    expect(html.match(/border-accent-bright bg-accent-bright/g)).toHaveLength(2);
+    expect(html.match(/border-danger bg-danger/g)).toHaveLength(1);
+  });
+
   it("escapes a hostile reason as text", () => {
     const html = renderToStaticMarkup(
       <TxStatus state={{ phase: "failed", run: 1, reason: "<img src=x onerror=alert(1)>", code: "unknown" }} />,
