@@ -1,0 +1,16 @@
+{
+  "name": "opaquely-contracts",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": { "compile": "hardhat compile", "test": "hardhat test", "node": "hardhat node" },
+  "devDependencies": {
+    "@fhevm/hardhat-plugin-v3": "0.13.0",
+    "@fhevm/sdk": "0.13.8",
+    "@nomicfoundation/hardhat-toolbox-mocha-ethers": "4.0.0",
+    "hardhat": "3.21.1",
+    "typescript": "5.9.3",
+    "viem": "2.57.13"
+  },
+  "dependencies": { "@fhevm/solidity": "0.13.4" }
+}
