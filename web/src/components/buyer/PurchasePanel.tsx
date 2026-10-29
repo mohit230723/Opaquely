@@ -66,7 +66,9 @@ export function PurchasePanel({ listing }: { listing: Listing }) {
     );
   } else if (access.isPending) {
     action = <Skeleton className="h-11 w-full" />;
-  } else if (access.isError) {
+  } else if (access.isError && access.data === undefined) {
+    // Only a first-load failure replaces the action. A failed background poll keeps the last known access
+    // (the query keeps its data), so a buyer in the middle of a purchase never loses the Buy or Access card.
     action = (
       <>
         <p className="text-sm text-danger">Could not check your access.</p>

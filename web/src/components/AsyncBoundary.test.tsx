@@ -32,6 +32,14 @@ describe("asyncView", () => {
     expect(asyncView({ status: "pending", data: undefined })).toBe("pending");
     expect(asyncView({ status: "error", data: undefined })).toBe("error");
   });
+  it("keeps showing loaded data when a background refetch fails (error with data)", () => {
+    expect(asyncView({ status: "error", data: ["a"] })).toBe("content");
+    expect(asyncView({ status: "error", data: ["a"] }, (d) => d.length === 0)).toBe("content");
+    expect(asyncView({ status: "error", data: [] as string[] }, (d) => d.length === 0)).toBe("empty");
+  });
+  it("treats a null result (data present) as loaded data, not as an error", () => {
+    expect(asyncView({ status: "error", data: null })).toBe("content");
+  });
   it("is empty when success and isEmpty says so", () => {
     expect(asyncView({ status: "success", data: [] as string[] }, (d) => d.length === 0)).toBe("empty");
   });
@@ -48,6 +56,17 @@ describe("AsyncBoundary", () => {
     expect(html).toContain("Something went wrong while reading data. Try again.");
     expect(html).toMatch(/<button[^>]*>[^<]*Try again/);
     expect(html).not.toContain("skeleton-block");
+  });
+  it("keeps the children and adds a refresh note when a refetch fails with data already loaded", () => {
+    const html = render(fakeQuery("error", ["Groceries Q3"]), (d) => d.length === 0);
+    expect(html).toContain("<li>Groceries Q3</li>");
+    expect(html).toContain("Couldn&#x27;t refresh datasets");
+    expect(html).not.toContain("Could not load datasets");
+    expect(html).not.toContain("skeleton-block");
+  });
+  it("shows no refresh note on success", () => {
+    const html = render(fakeQuery("success", ["Groceries Q3"]));
+    expect(html).not.toContain("refresh");
   });
   it("renders the skeleton with aria-busy and screen-reader text while pending", () => {
     const html = render(fakeQuery("pending"));

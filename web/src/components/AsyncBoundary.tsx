@@ -7,13 +7,18 @@ import { Card } from "@/components/ui/Card";
 
 export type AsyncView = "pending" | "error" | "empty" | "content";
 
-/** Which branch to render for a query. Pure, so it is unit-tested directly. */
+/**
+ * Which branch to render for a query. Pure, so it is unit-tested directly.
+ * An error that arrives while data is already loaded (a failed 4 s background poll keeps the old data) is
+ * not a reason to replace the screen: only a failure with nothing to show is the error view. Otherwise one
+ * flaky RPC call would unmount a purchase panel in the middle of a transaction.
+ */
 export function asyncView<T>(
   query: Pick<UseQueryResult<T>, "status" | "data">,
   isEmpty?: (data: T) => boolean,
 ): AsyncView {
   if (query.status === "pending") return "pending";
-  if (query.status === "error") return "error";
+  if (query.status === "error" && query.data === undefined) return "error";
   if (isEmpty && isEmpty(query.data as T)) return "empty";
   return "content";
 }
@@ -58,5 +63,16 @@ export function AsyncBoundary<T>({ query, thing, skeleton, isEmpty, empty, child
 
   if (view === "empty") return <>{empty ?? null}</>;
 
-  return <>{children(query.data as T)}</>;
+  // A failed background refresh keeps the last good data on screen and adds a small note beside it.
+  const refreshFailed = query.status === "error";
+  return (
+    <>
+      {refreshFailed ? (
+        <p role="status" className="mb-3 text-sm text-muted">
+          Couldn&apos;t refresh {thing}. Showing the last loaded data.
+        </p>
+      ) : null}
+      {children(query.data as T)}
+    </>
+  );
 }
