@@ -2,13 +2,17 @@
 // into the web app keyed by chainId. Run with the node up:  npm run deploy   (= hardhat compile + this)
 //
 //   RPC_URL                 default http://127.0.0.1:8545
-//   DEPLOYER_PRIVATE_KEY    optional. Without it the node's first unlocked account is used (local node only)
+//   DEPLOYER_PRIVATE_KEY    optional, with or without 0x. Without it the node's first unlocked account is used
+//                           (local node only). Read from the environment only: the key is never printed or
+//                           written, and a malformed one is rejected without echoing it.
+//   On any chain other than 31337 a preflight prints the chain id, the deployer address and its balance, and
+//   stops before sending anything when the balance is zero. The local deploy prints and does what it always did.
 //   ANOMALY_THRESHOLD_CENTS default 500000
 //   --out <dir>             default ../web/src/contracts   (tests point this at a scratch dir)
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { createPublicClient, createWalletClient, http, getAddress } from "viem";
+import { createPublicClient, createWalletClient, http, getAddress, formatEther } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -29,14 +33,34 @@ const chainId = await publicClient.getChainId().catch(() => {
   throw new Error(`No node answers at ${rpcUrl}. Start one with: node scripts/dev-node.mjs start`);
 });
 
+/** Trim, add a missing 0x, and accept only 32 hex bytes. The value is never put into an error message. */
+function normalisePrivateKey(raw) {
+  const trimmed = raw.trim();
+  const key = /^0x/i.test(trimmed) ? "0x" + trimmed.slice(2) : "0x" + trimmed;
+  if (!/^0x[0-9a-fA-F]{64}$/.test(key)) throw new Error("DEPLOYER_PRIVATE_KEY is not a valid 32-byte hex private key");
+  return key;
+}
+
 let account;
-if (process.env.DEPLOYER_PRIVATE_KEY) account = privateKeyToAccount(process.env.DEPLOYER_PRIVATE_KEY);
+if (process.env.DEPLOYER_PRIVATE_KEY) account = privateKeyToAccount(normalisePrivateKey(process.env.DEPLOYER_PRIVATE_KEY));
 else {
   const accounts = await publicClient.request({ method: "eth_accounts" });
   if (!accounts || accounts.length === 0) throw new Error("No unlocked account at " + rpcUrl + "; set DEPLOYER_PRIVATE_KEY");
   account = getAddress(accounts[0]);
 }
 const wallet = createWalletClient({ account, transport: http(rpcUrl) });
+
+// Preflight for real chains only: show where and with what balance we are about to deploy, and refuse an
+// empty wallet before any transaction is sent. Never prints the key.
+if (chainId !== 31337) {
+  const deployer = typeof account === "string" ? account : account.address;
+  const balance = await publicClient.getBalance({ address: deployer });
+  console.log(`deploy target: chain ${chainId}, deployer ${deployer}, balance ${formatEther(balance)} ETH`);
+  if (balance === 0n) {
+    console.error(`The deployer ${deployer} has 0 ETH on chain ${chainId}. Fund it from a Sepolia faucet, then rerun. Nothing was sent.`);
+    process.exit(1);
+  }
+}
 
 async function deploy(name, args) {
   const art = artifact(name);

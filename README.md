@@ -84,3 +84,20 @@ The measured allow-list is the app origin, the node RPC, `https://pulse.walletco
 ```
 node web/e2e/helpers/privacy-audit.mjs --self-test
 ```
+
+## Sepolia (manual runbook, not run by any script)
+
+This is ROADMAP criterion 3 and LAND-03. The code side is built and tested, but the live run needs the owner's own funded Sepolia key, so no script and no automated run touches Sepolia. **LAND-03 stays pending until the owner completes these steps.** Until then, every normal build is the local demo: Sepolia is off unless `NEXT_PUBLIC_ENABLE_SEPOLIA` is exactly `1` and a Sepolia entry exists in `web/src/contracts/deployments.json`.
+
+1. **Faucet.** Get Sepolia test ETH for the deployer and for both demo wallets (seller and buyer). At least 0.2 test ETH on the deployer and on the seller is a reasonable estimate.
+2. **Clean build.** In `contracts/`, run `npx hardhat clean`, then `npx hardhat compile`.
+3. **Deploy, key from the shell only.** Set `RPC_URL` (for example the keyless `https://ethereum-sepolia-rpc.publicnode.com`) and `DEPLOYER_PRIVATE_KEY` in your shell, never in a file. Then run `npm --prefix contracts run deploy`. For any chain other than 31337 the script first prints `deploy target: chain 11155111, deployer <address>, balance <n> ETH` and refuses an empty balance before sending anything. The `11155111` entry is merged next to `31337` in `web/src/contracts/deployments.json`.
+4. **Verify the deploy.** With the same environment, `node contracts/scripts/verify-deploy.mjs --keep 31337` must print `DEPLOY VERIFIED chain=11155111`.
+5. **Build with the flag.** Set `NEXT_PUBLIC_ENABLE_SEPOLIA=1` (and optionally `NEXT_PUBLIC_SEPOLIA_RPC_URL`, keyless only: every `NEXT_PUBLIC_` value is visible in the page), then run `npm --prefix web run build` and `npm --prefix web run start`.
+6. **Wallet and pre-warm.** Switch MetaMask to Sepolia. The header badge must read `Sepolia, real FHE`. If you restarted a local node earlier, use MetaMask, Settings, Advanced, "Clear activity tab data" first. Real encryption downloads a public key of roughly 50 MB the first time, so pre-warm it: add one bill earlier the same day, in the same browser profile.
+7. **Run the flow.** Seller path (create a dataset, add 3 bills, list), buyer path (buy, `Access granted`), then withdraw.
+8. **Audit the network.** In DevTools, record the relayer and key-download hosts, pass them as `extraAllowedOrigins` to `createPrivacyAudit` in `web/e2e/helpers/privacy-audit.mjs`, and confirm that no image, OCR text or vendor appears in any request, console line, storage or IndexedDB.
+9. **If the worker or WASM fails** (a console warning or `EncryptOffloadUnavailableError`): change the Sepolia branch in `web/src/lib/zama.ts` to `web({ offloadEncrypt: false })`. If the build itself fails, use `next build --webpack` and `next dev --webpack`, and as a last resort `next@15.5.28`.
+10. **Return to local.** Unset the flag and rebuild. The Sepolia entry is inert without the flag. The rehearsal (`npm run demo:rehearse`) always builds with the flag off.
+
+**Keys.** `DEPLOYER_PRIVATE_KEY` lives in the shell environment only. It is never written to a file, never committed, never put in a `NEXT_PUBLIC_` variable, and never printed by the deploy script.
