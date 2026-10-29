@@ -16,6 +16,8 @@ export const DECRYPT_HELPER = "Decryption arrives in Milestone 2.";
 
 /**
  * What a purchase unlocks once decryption ships in Milestone 2. It names aggregates, never numbers.
+ * "Record count" is in BUYER_GETS but deliberately not listed here: it is public on every listing
+ * (Listing.recordCount), so it is not an encrypted insight the buyer decrypts.
  * The minimum bill count must not be described to buyers as a privacy guarantee (contracts/README.md, WR-01).
  */
 export const BUYER_CAN_DECRYPT = "You can decrypt: 6 category totals, 1 anomaly count, grand total.";
