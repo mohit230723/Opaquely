@@ -112,3 +112,45 @@ Then restore the `deployedAt`-only change with `git checkout -- web/src/contract
 ### Known limits
 
 The category mask is seller-declared and unverified, and small datasets can reveal exact amounts through the aggregates (review WR-01, an open decision). See "Privacy notes" in `../contracts/README.md`.
+
+## Live marketplace (Phase 5)
+
+### Buyer path on the chain
+
+Listings come from `getListings` (read in pages) and are filtered in the browser by search text, category and minimum price. Buy simulates `buyListing(id, price)` first and then sends exactly the listed price. "Access granted" is always read from `hasAccess` and never inferred from a transaction result. My purchases come from `purchasesByBuyer`, and the tx hash on each row comes from the `Purchased` event. The seller dashboard reads `datasetsByOwner` and `sellerStats`. Withdraw is a pull payment: the seller takes the whole pending amount in one transaction. The activity timeline reads the `Listed`, `Purchased` and `Withdrawn` events from `deployBlock`. The seller's balance is held until withdrawn, not escrow: there is no refund and no release step.
+
+### Two wallets side by side
+
+On the chain, the reads that another wallet can change poll every 4 s (`src/data/polling.ts`), so a seller profile and a buyer profile in two windows stay in sync without a reload. The stub data layer never polls. A failed buy re-reads access at once, so a stale tab that hits "You already own this dataset." flips to "Access granted" immediately.
+
+### Where each rejection is proven
+
+- Double buy: in the browser with a stale second tab (`buyer-live`), and in the integration test.
+- Own listing: the browser shows a disabled Buy button and the message; the `OwnListing` revert is proven in `src/data/live/live.integration.test.ts`.
+- A stale price and a wrong payment: only in the integration test, because the UI always pays the listed price and a price cannot change on chain.
+
+### Categories
+
+Categories on a listing are declared by the seller and not verified. "Categories not declared by the seller" means the seller listed from a tab that did not hold every bill, so the mask is 0.
+
+### Seed helper
+
+`node web/e2e/helpers/seed-listing.mjs --self-check` seeds two listings on a running local node (create dataset, three encrypted bills, list) and reads them back. It signs with the public Hardhat key #0 and refuses any chain other than 31337. `buyer-live` imports the same `seedListing` function.
+
+### Gate commands
+
+From the repo root, in order:
+
+```bash
+node contracts/scripts/dev-node.mjs start
+npm --prefix contracts run deploy
+npm --prefix web run build
+node web/e2e/run-all.mjs --port <free port> buyer-live
+node contracts/scripts/dev-node.mjs stop
+```
+
+Then restore the `deployedAt`-only change with `git checkout -- web/src/contracts/deployments.json web/src/contracts/deployments.ts`. `buyer-live` drives five browser contexts (buyer, a stale tab of the buyer, Hardhat #2 as an outsider, the seller with a buyer role, and the seller's dashboard) and needs a fresh node with the contracts deployed. An unfiltered run with no node prints `SKIP buyer-live (no node)`, next to the fhe-spike and seller-live skips.
+
+### Known limits for Phase 6
+
+After a node restart, redeploy: the app does not detect an address that has no code. On Sepolia, a read right after a receipt may need pinning to the receipt block, and public RPCs cap the block range of `eth_getLogs`, so the activity timeline will need chunked reads.
