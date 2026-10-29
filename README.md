@@ -65,22 +65,24 @@ Layout:
 
 ## What the rehearsal's privacy audit checks
 
-The rehearsal watches both browser pages (seller and buyer) with one helper, `web/e2e/helpers/privacy-audit.mjs`. It fails the run on any of these 12 findings:
+The rehearsal watches both browser pages (seller and buyer) with one helper, `web/e2e/helpers/privacy-audit.mjs`. It fails the run on any of these 14 findings:
 
 1. `network-origin`: a request attempt to anything except the app, the node RPC, or the two wallet-library hosts below.
 2. `post-target`: a POST anywhere except the node RPC and `pulse.walletconnect.org`.
-3. `marker-request`: a bill marker (vendor, amount text, PNG header, OCR-only line) in any request URL or body.
-4. `marker-console`: a marker in any console line.
-5. `marker-pageerror`: a marker in any page error.
-6. `marker-body`: a marker in the buyer's page text. The seller's own tab shows the seller's own values on purpose, so its text is not scanned.
-7. `storage-key`: a localStorage or sessionStorage key outside the wallet and role allow-list.
-8. `marker-storage`: a marker in any storage value.
-9. `idb-name`: an IndexedDB database outside the two wallet databases.
-10. `marker-idb`: a marker in any IndexedDB record.
-11. `failed-request`: a failed OCR, sample or app request.
-12. `websocket-host`: a WebSocket to any host but the app or the node.
+3. `marker-request`: a bill marker (vendor, amount text, PNG header, OCR-only line) in any request URL or body. Matching ignores case, here and in every marker check below.
+4. `marker-request-encoded`: a marker that only shows once a request URL or body is percent-decoded (`SHREE%20GANESH`). A malformed `%` sequence is left as it is and never throws.
+5. `marker-request-form`: a marker that only shows once `+` is read as a space, as in a form body (`SHREE+GANESH`).
+6. `marker-console`: a marker in any console line.
+7. `marker-pageerror`: a marker in any page error.
+8. `marker-body`: a marker in the buyer's page text. The seller's own tab shows the seller's own values on purpose, so its text is not scanned.
+9. `storage-key`: a localStorage or sessionStorage key outside the wallet and role allow-list.
+10. `marker-storage`: a marker in any storage value.
+11. `idb-name`: an IndexedDB database outside the two wallet databases.
+12. `marker-idb`: a marker in any IndexedDB record.
+13. `failed-request`: a failed OCR, sample or app request.
+14. `websocket-host`: a WebSocket to any host but the app or the node.
 
-The measured allow-list is the app origin, the node RPC, `https://pulse.walletconnect.org` (POST) and `https://api.web3modal.org` (GET). Both wallet hosts are aborted by the test runner, so nothing is actually sent. A helper that cannot fail proves nothing, so it has a self-test that seeds one leak of each kind and checks that all 12 checks fire and that a clean page stays quiet:
+The measured allow-list is the app origin, the node RPC, `https://pulse.walletconnect.org` (POST) and `https://api.web3modal.org` (GET). Both wallet hosts are aborted by the test runner, so nothing is actually sent. A helper that cannot fail proves nothing, so it has a self-test that seeds one leak of each kind and checks that all 14 checks fire and that a clean page stays quiet:
 
 ```
 node web/e2e/helpers/privacy-audit.mjs --self-test

