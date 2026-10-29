@@ -1,35 +1,17 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import { useAccount } from "wagmi";
-import { ConnectButton, useConnectModal } from "@rainbow-me/rainbowkit";
+import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { GeistMono } from "geist/font/mono";
 import GradientASCII from "./GradientASCII";
 import { Button } from "@/components/ui/Button";
-import { useRole } from "@/lib/role";
 
 // The hero top is near-white and the bottom near-black, so the copy sits in the lower half over a scrim.
 const FALLBACK_BACKGROUND = "linear-gradient(to bottom, #1e3fd8, #050816)";
 const SCRIM_BACKGROUND = "linear-gradient(to top, #050816 0%, rgba(5,8,22,0.85) 45%, rgba(5,8,22,0) 100%)";
 
 export function Hero() {
-  const router = useRouter();
-  const { address, isConnected } = useAccount();
-  const { openConnectModal } = useConnectModal();
-  const role = useRole(address);
-
-  // Disconnected: the wallet is the entry to every flow. Connected: skip /role when the stored role matches.
-  function go(wanted: "seller" | "buyer") {
-    if (!isConnected) {
-      openConnectModal?.();
-      return;
-    }
-    if (role === wanted) {
-      router.push(wanted === "seller" ? "/sell" : "/buy");
-      return;
-    }
-    router.push("/role");
-  }
+  const { isConnected } = useAccount();
 
   return (
     <section className="relative h-[600px] w-full overflow-hidden" style={{ background: FALLBACK_BACKGROUND }}>
@@ -56,11 +38,11 @@ export function Hero() {
             bill.
           </p>
           <div className="mt-6 flex flex-wrap items-center gap-4">
-            <Button variant="primary" onClick={() => go("seller")}>
-              Start selling
+            <Button variant="primary" href="/upload">
+              Upload
             </Button>
-            <Button variant="secondary" onClick={() => go("buyer")}>
-              Browse datasets
+            <Button variant="secondary" href="/marketplace">
+              Browse marketplace
             </Button>
             {isConnected ? null : <ConnectButton showBalance={false} />}
           </div>

@@ -1,7 +1,8 @@
 import type { ReactNode } from "react";
-import { RoleGuard } from "@/components/RoleGuard";
+import { WalletGate } from "@/components/WalletGate";
 
-// The one place the seller guard is mounted: every /sell page is wrapped once.
+// The still-live /sell/datasets/[id] pages (detail, add, list, chain-view) until plan 07-04 folds them
+// into Upload: gated by wallet connection only, like every other wallet page.
 export default function SellerLayout({ children }: { children: ReactNode }) {
-  return <RoleGuard need="seller">{children}</RoleGuard>;
+  return <WalletGate>{children}</WalletGate>;
 }

@@ -70,7 +70,7 @@ function PurchasePanelInner({ listing }: { listing: Listing }) {
 
   function viewPurchases() {
     setOpen(false);
-    router.push("/buy/purchases");
+    router.push("/my-datasets");
   }
 
   let action;
@@ -128,7 +128,7 @@ function PurchasePanelInner({ listing }: { listing: Listing }) {
         open={open}
         title="Confirm purchase"
         confirmLabel={`Pay ${price}`}
-        dismissLabel={confirmed ? "View my purchases" : "Back to listing"}
+        dismissLabel={confirmed ? "View my datasets" : "Back to listing"}
         hideConfirm={confirmed || failedButOwned}
         busy={busy}
         onConfirm={onConfirm}

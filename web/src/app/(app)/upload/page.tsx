@@ -16,7 +16,7 @@ function validName(value: string): boolean {
   return n >= 1 && n <= 60;
 }
 
-export default function NewDatasetPage() {
+export default function UploadPage() {
   const { state, run } = useCreateDataset();
   const [name, setName] = useState("");
   const [error, setError] = useState<string | undefined>();
@@ -45,7 +45,7 @@ export default function NewDatasetPage() {
   }
 
   return (
-    <PageShell title="New dataset">
+    <PageShell title="Upload" subtitle="Turn your bills into an encrypted dataset you can sell.">
       <Card className="max-w-xl">
         {state.phase === "confirmed" ? (
           <div>
@@ -53,8 +53,8 @@ export default function NewDatasetPage() {
             <p className="mt-1 text-muted wrap-break-word">{submitted?.name}</p>
             <div className="mt-6 flex flex-wrap gap-3">
               <Button href={`/sell/datasets/${created ?? ""}/add`}>Add your first bill</Button>
-              <Button variant="secondary" href="/sell/datasets">
-                Back to datasets
+              <Button variant="secondary" href="/my-datasets">
+                View my datasets
               </Button>
             </div>
           </div>
