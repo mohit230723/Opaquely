@@ -2,7 +2,7 @@
 
 import { useAccount } from "wagmi";
 import { StatusChip } from "@/components/ui/StatusChip";
-import { NETWORK_TOOLTIP, isWrongNetwork, networkLabel } from "@/lib/network";
+import { isWrongNetwork, networkLabel, networkTooltip } from "@/lib/network";
 
 /** Mode label shown on every page. Uses the wallet's chain, not wagmi's configured chain. */
 export function NetworkBadge() {
@@ -11,7 +11,7 @@ export function NetworkBadge() {
   const label = wrong ? "Wrong network" : networkLabel(chainId);
 
   return (
-    <span title={NETWORK_TOOLTIP} data-testid="network-badge">
+    <span title={networkTooltip(chainId)} data-testid="network-badge">
       <StatusChip variant={wrong ? "danger" : "info"}>{label}</StatusChip>
     </span>
   );
