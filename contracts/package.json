@@ -3,7 +3,13 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "scripts": { "compile": "hardhat compile", "test": "hardhat test", "node": "hardhat node", "node:start": "node scripts/dev-node.mjs start", "node:stop": "node scripts/dev-node.mjs stop" },
+  "scripts": {
+    "compile": "hardhat compile",
+    "test": "hardhat test",
+    "node": "hardhat node",
+    "node:start": "node scripts/dev-node.mjs start",
+    "node:stop": "node scripts/dev-node.mjs stop"
+  },
   "devDependencies": {
     "@fhevm/hardhat-plugin-v3": "0.13.0",
     "@fhevm/sdk": "0.13.8",
@@ -12,5 +18,8 @@
     "typescript": "5.9.3",
     "viem": "2.57.13"
   },
-  "dependencies": { "@fhevm/solidity": "0.13.4" }
+  "dependencies": {
+    "@fhevm/solidity": "0.13.4",
+    "@openzeppelin/contracts": "5.6.1"
+  }
 }
