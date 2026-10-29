@@ -54,7 +54,8 @@ describe("AsyncBoundary", () => {
     const html = render(fakeQuery("error"));
     expect(html).toContain("Could not load datasets");
     expect(html).toContain("Something went wrong while reading data. Try again.");
-    expect(html).toMatch(/<button[^>]*>[^<]*Try again/);
+    // The specular button wraps its label in a span after the light canvas.
+    expect(html).toMatch(/<button[^>]*>.*?<span[^>]*>Try again<\/span><\/button>/);
     expect(html).not.toContain("skeleton-block");
   });
   it("keeps the children and adds a refresh note when a refetch fails with data already loaded", () => {
