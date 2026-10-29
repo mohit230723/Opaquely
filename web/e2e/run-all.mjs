@@ -95,6 +95,7 @@ async function main() {
       const name = file.replace(/\.e2e\.mjs$/, "");
       if (filters.length > 0 && !filters.includes(name)) continue;
 
+      const startedAt = Date.now();
       const contexts = [];
       const pageErrors = [];
 
@@ -145,10 +146,10 @@ async function main() {
         if (pageErrors.length > 0) {
           throw new Error("page errors: " + pageErrors.map((e) => e.message).join(" | "));
         }
-        console.log(`PASS ${name}`);
+        console.log(`PASS ${name} (${((Date.now() - startedAt) / 1000).toFixed(1)}s)`);
       } catch (err) {
         failed = true;
-        console.log(`FAIL ${name}: ${err instanceof Error ? err.message : String(err)}`);
+        console.log(`FAIL ${name} (${((Date.now() - startedAt) / 1000).toFixed(1)}s): ${err instanceof Error ? err.message : String(err)}`);
       } finally {
         for (const c of contexts) await c.close().catch(() => {});
       }
