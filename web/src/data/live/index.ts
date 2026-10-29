@@ -16,10 +16,15 @@ import {
 } from "wagmi/actions";
 import { getDeployment, type Deployment } from "@/contracts";
 import { CATEGORIES, isCategoryId } from "@/lib/categories";
+import { HARDHAT_CHAIN_ID } from "@/lib/constants";
 import { encryptBill } from "@/lib/fhe";
 import { declaredCategories } from "@/lib/session-bills";
 import { ReadableTxError, WRONG_NETWORK_REASON, encryptFailureReason } from "@/lib/tx-errors";
 import type { DataLayer } from "../data-layer";
+import { getContractEventsChunked, waitForHead, type LogsClient } from "./logs";
+
+/** A Purchased log as the purchases read uses it. */
+type PurchasedLog = { args: unknown; transactionHash: string };
 import type {
   ActivityEvent,
   BillFields,
@@ -117,6 +122,11 @@ export function createLiveDataLayer({ config, address, chainId }: LiveOptions): 
       hash,
       async wait(): Promise<TxReceipt> {
         const receipt = await waitForTransactionReceipt(config, { hash, chainId });
+        // A load-balanced public RPC can still serve the block before the receipt's; wait briefly (never fails).
+        if (chainId !== HARDHAT_CHAIN_ID) {
+          const pc = getPublicClient(config, { chainId });
+          if (pc) await waitForHead(pc as unknown as LogsClient, receipt.blockNumber);
+        }
         const createdId = receipt.status === "success" ? createdIdOf?.(receipt.logs) : undefined;
         return {
           status: receipt.status === "success" ? "success" : "reverted",
@@ -246,16 +256,20 @@ export function createLiveDataLayer({ config, address, chainId }: LiveOptions): 
       if (!client) return [];
       const [rows, logs] = await Promise.all([
         read<{ listingId: bigint; priceWei: bigint; purchasedAt: bigint }[]>(d.market, "purchasesByBuyer", [address]),
-        client.getContractEvents({
-          address: d.market.address,
-          abi: d.market.abi,
-          eventName: "Purchased",
-          args: { buyer: address },
-          fromBlock: d.deployBlock,
-        }),
+        getContractEventsChunked(
+          client as unknown as LogsClient,
+          {
+            address: d.market.address,
+            abi: d.market.abi,
+            eventName: "Purchased",
+            args: { buyer: address },
+            fromBlock: d.deployBlock,
+          },
+          { chainId },
+        ),
       ]);
       const hashById = new Map(
-        logs.map((l) => [String((l.args as { listingId: bigint }).listingId), l.transactionHash as Hex]),
+        (logs as PurchasedLog[]).map((l) => [String((l.args as { listingId: bigint }).listingId), l.transactionHash as Hex]),
       );
       // Every purchasesByBuyer row is a purchase by this wallet: the contract sets the purchased flag in
       // the same transaction that pushes the row, so hasAccess is true by construction here. The listing
@@ -283,13 +297,13 @@ export function createLiveDataLayer({ config, address, chainId }: LiveOptions): 
       const client = getPublicClient(config, { chainId });
       if (!client) return [];
       // deployBlock is the only lower bound (never block 0). Purchase titles are joined from the Listed
-      // events of the same range. Public RPCs cap eth_getLogs ranges, so Sepolia (Phase 6) may need
-      // chunked queries.
+      // events of the same range. Off the local chain the reads are chunked (public RPCs cap eth_getLogs
+      // ranges); on the local chain each is one call.
       const common = { address: d.market.address, abi: d.market.abi, fromBlock: d.deployBlock } as const;
       const [listed, bought, withdrawn] = await Promise.all([
-        client.getContractEvents({ ...common, eventName: "Listed" }),
-        client.getContractEvents({ ...common, eventName: "Purchased" }),
-        client.getContractEvents({ ...common, eventName: "Withdrawn" }),
+        getContractEventsChunked(client as unknown as LogsClient, { ...common, eventName: "Listed" }, { chainId }),
+        getContractEventsChunked(client as unknown as LogsClient, { ...common, eventName: "Purchased" }, { chainId }),
+        getContractEventsChunked(client as unknown as LogsClient, { ...common, eventName: "Withdrawn" }, { chainId }),
       ]);
       type Ev = {
         args: Record<string, unknown>;
