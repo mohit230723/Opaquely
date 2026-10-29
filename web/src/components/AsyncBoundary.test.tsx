@@ -61,6 +61,7 @@ describe("AsyncBoundary", () => {
     const html = render(fakeQuery("error", ["Groceries Q3"]), (d) => d.length === 0);
     expect(html).toContain("<li>Groceries Q3</li>");
     expect(html).toContain("Couldn&#x27;t refresh datasets");
+    expect(html).toMatch(/<button[^>]*>Try again/);
     expect(html).not.toContain("Could not load datasets");
     expect(html).not.toContain("skeleton-block");
   });

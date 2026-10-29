@@ -75,14 +75,17 @@ export default async function shell({ baseUrl, accounts, assert, waitForWallet, 
     await page.getByRole("button", { name: "Try again" }).click();
     await page.getByText("Transaction confirmed").waitFor({ state: "visible", ...T });
 
-    // Fail the next read: the screen shows its error, Try again recovers it.
+    // Fail the next read: the loaded page stays and a "Couldn't refresh" note appears (a failed refetch must
+    // never replace data that is already on screen); Try again clears the note.
     await page.goBack();
     await page.waitForURL((u) => u.pathname === "/sell", { timeout: 15_000 });
     await page.getByText("Fails once").waitFor({ state: "visible", ...LONG });
     await page.getByLabel("Fail the next read (demo)").check();
-    await page.getByText(/Could not load/).first().waitFor({ state: "visible", ...T });
+    await page.getByText(/Couldn't refresh/).first().waitFor({ state: "visible", ...T });
+    await page.getByText("Groceries Q3").waitFor({ state: "visible", ...T });
+    assert((await page.getByText(/Could not load/).count()) === 0, "a failed refetch must not replace the loaded page with the error card");
     await page.getByRole("button", { name: "Try again" }).click();
-    await page.getByText(/Could not load/).waitFor({ state: "detached", ...T });
+    await page.getByText(/Couldn't refresh/).waitFor({ state: "detached", ...T });
     await page.getByText("Groceries Q3").waitFor({ state: "visible", ...T });
 
     // Empty wallet: the empty state shows without a rebuild.

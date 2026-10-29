@@ -69,7 +69,10 @@ export function AsyncBoundary<T>({ query, thing, skeleton, isEmpty, empty, child
     <>
       {refreshFailed ? (
         <p role="status" className="mb-3 text-sm text-muted">
-          Couldn&apos;t refresh {thing}. Showing the last loaded data.
+          Couldn&apos;t refresh {thing}. Showing the last loaded data.{" "}
+          <button type="button" className="font-semibold text-text underline" onClick={() => void query.refetch()}>
+            Try again
+          </button>
         </p>
       ) : null}
       {children(query.data as T)}
