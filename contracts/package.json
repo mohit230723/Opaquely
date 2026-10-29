@@ -8,7 +8,9 @@
     "test": "hardhat test",
     "node": "hardhat node",
     "node:start": "node scripts/dev-node.mjs start",
-    "node:stop": "node scripts/dev-node.mjs stop"
+    "node:stop": "node scripts/dev-node.mjs stop",
+    "deploy": "hardhat compile && node scripts/deploy.mjs",
+    "verify:deploy": "node scripts/verify-deploy.mjs"
   },
   "devDependencies": {
     "@fhevm/hardhat-plugin-v3": "0.13.0",
