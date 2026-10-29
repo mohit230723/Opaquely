@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "scripts": { "compile": "hardhat compile", "test": "hardhat test", "node": "hardhat node" },
+  "scripts": { "compile": "hardhat compile", "test": "hardhat test", "node": "hardhat node", "node:start": "node scripts/dev-node.mjs start", "node:stop": "node scripts/dev-node.mjs stop" },
   "devDependencies": {
     "@fhevm/hardhat-plugin-v3": "0.13.0",
     "@fhevm/sdk": "0.13.8",
