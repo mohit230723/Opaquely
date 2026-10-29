@@ -53,6 +53,7 @@ Owns the encrypted bills, the FHE math, the ACL and the seal.
 - The anomaly threshold is 500000 cents, plaintext, set at deploy by `ANOMALY_THRESHOLD_CENTS`. `MIN_BILLS_TO_LIST` is 3.
 - Per-bill handles are decryptable by the seller only. After a purchase the buyer gets exactly 9 aggregate handles: 6 category totals, the grand total, the encrypted record count and the anomaly count.
 - The vendor never goes on chain.
+- `setMarketplace` is deployer-only and one-time. It rejects the zero address and any address without code (`InvalidMarketplace`), so a rejected call does not use up the one-shot.
 
 ### Marketplace
 
@@ -89,7 +90,7 @@ npm run node:stop
 `web/src/lib/tx-errors.ts` is not edited in Phase 3. AlreadyPurchased, OwnListing and PriceChanged already have reasons in the web table.
 
 - Marketplace: InvalidTitle, DescriptionTooLong, ZeroPrice, InvalidCategoryMask, ListingNotFound, OwnListing, AlreadyPurchased, PriceChanged, WrongPayment, NothingToWithdraw, TransferFailed
-- DatasetRegistry: InvalidName, DatasetNotFound, NotDatasetOwner, DatasetIsSealed, TooFewBills, OnlyMarketplace, NotDeployer, MarketplaceAlreadySet, NotSealed
+- DatasetRegistry: InvalidName, DatasetNotFound, NotDatasetOwner, DatasetIsSealed, TooFewBills, OnlyMarketplace, NotDeployer, MarketplaceAlreadySet, InvalidMarketplace, NotSealed
 
 ### Measured costs on the local mock
 

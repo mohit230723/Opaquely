@@ -90,6 +90,7 @@ contract DatasetRegistry is ZamaEthereumConfig, IDatasetRegistry {
     error OnlyMarketplace();
     error NotDeployer();
     error MarketplaceAlreadySet();
+    error InvalidMarketplace();
     error NotSealed();
 
     modifier onlyMarketplace() {
@@ -102,10 +103,12 @@ contract DatasetRegistry is ZamaEthereumConfig, IDatasetRegistry {
         deployer = msg.sender;
     }
 
-    /// One-shot wiring, called by the deploy script right after Marketplace is deployed.
+    /// One-shot, deployer-only wiring, called by the deploy script right after Marketplace is deployed.
+    /// The target must be a deployed contract: an EOA here would be a free read grant on every dataset.
     function setMarketplace(address marketplace_) external {
         if (msg.sender != deployer) revert NotDeployer();
         if (marketplace != address(0)) revert MarketplaceAlreadySet();
+        if (marketplace_ == address(0) || marketplace_.code.length == 0) revert InvalidMarketplace();
         marketplace = marketplace_;
         emit MarketplaceSet(marketplace_);
     }

@@ -1,7 +1,7 @@
 {
   "31337": {
     "chainId": 31337,
-    "deployedAt": "2026-10-29T05:00:13.237Z",
+    "deployedAt": "2026-10-29T05:09:06.402Z",
     "deployBlock": 27,
     "anomalyThresholdCents": "500000",
     "DatasetRegistry": {
@@ -32,6 +32,11 @@
             }
           ],
           "name": "DatasetNotFound",
+          "type": "error"
+        },
+        {
+          "inputs": [],
+          "name": "InvalidMarketplace",
           "type": "error"
         },
         {
@@ -1339,6 +1344,11 @@
             }
           ],
           "name": "DatasetNotFound",
+          "type": "error"
+        },
+        {
+          "inputs": [],
+          "name": "InvalidMarketplace",
           "type": "error"
         },
         {

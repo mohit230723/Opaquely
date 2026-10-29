@@ -84,6 +84,21 @@ describe("DatasetRegistry: encrypted aggregates (COMP-01..04)", function () {
     await expect(registry.connect(deployer).setMarketplace(marketAddress)).to.be.revertedWithCustomError(registry, "MarketplaceAlreadySet");
   });
 
+  it("setMarketplace rejects the zero address and an EOA, and stays one-time and deployer-only", async function () {
+    const [deployer, stranger] = await ethers.getSigners();
+    const registry = await ethers.deployContract("DatasetRegistry", [THRESHOLD_CENTS]); // deployed but not wired
+    const market = await ethers.deployContract("Marketplace", [await registry.getAddress()]);
+
+    await expect(registry.connect(stranger).setMarketplace(await market.getAddress())).to.be.revertedWithCustomError(registry, "NotDeployer");
+    await expect(registry.connect(deployer).setMarketplace(ethers.ZeroAddress)).to.be.revertedWithCustomError(registry, "InvalidMarketplace");
+    await expect(registry.connect(deployer).setMarketplace(stranger.address)).to.be.revertedWithCustomError(registry, "InvalidMarketplace");
+    expect(await registry.marketplace(), "rejected calls must not consume the one-shot").to.equal(ethers.ZeroAddress);
+
+    await expect(registry.connect(deployer).setMarketplace(await market.getAddress())).to.emit(registry, "MarketplaceSet");
+    expect(await registry.marketplace()).to.equal(await market.getAddress());
+    await expect(registry.connect(deployer).setMarketplace(await market.getAddress())).to.be.revertedWithCustomError(registry, "MarketplaceAlreadySet");
+  });
+
   it("the seller can decrypt every per-bill handle; a stranger cannot", async function () {
     const [seller, stranger] = await ethers.getSigners();
     const { registry, registryAddress } = await deployAll(ethers);

@@ -2,7 +2,7 @@
 export const deployments = {
   "31337": {
     "chainId": 31337,
-    "deployedAt": "2026-10-29T05:00:13.237Z",
+    "deployedAt": "2026-10-29T05:09:06.402Z",
     "deployBlock": 27,
     "anomalyThresholdCents": "500000",
     "DatasetRegistry": {
@@ -33,6 +33,11 @@ export const deployments = {
             }
           ],
           "name": "DatasetNotFound",
+          "type": "error"
+        },
+        {
+          "inputs": [],
+          "name": "InvalidMarketplace",
           "type": "error"
         },
         {
@@ -1340,6 +1345,11 @@ export const deployments = {
             }
           ],
           "name": "DatasetNotFound",
+          "type": "error"
+        },
+        {
+          "inputs": [],
+          "name": "InvalidMarketplace",
           "type": "error"
         },
         {
