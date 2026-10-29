@@ -158,7 +158,8 @@ export default async function sellerLive({ baseUrl, accounts, assert, waitForWal
   await page.getByLabel("Description").fill("Three household bills from October 2026.");
   await page.getByLabel("Price (ETH)").fill("0.05");
   await page.getByRole("button", { name: "List dataset", exact: true }).click();
-  await page.getByText("The listing also shows buyers which categories these bills cover").waitFor(T);
+  // The tab holds all three bills, so the dialog names the categories buyers will see (WR-06).
+  await page.getByText("Buyers will see these categories: Utilities, Groceries/Food, Shopping.").waitFor(T);
   await page.getByRole("button", { name: "Seal and list dataset" }).click();
   await page.getByText("Transaction confirmed").waitFor(T);
 

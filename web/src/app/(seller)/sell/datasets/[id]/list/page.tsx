@@ -13,11 +13,14 @@ import { Card } from "@/components/ui/Card";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { Field } from "@/components/ui/Field";
 import { useDataset, useListDataset } from "@/data/hooks";
+import { useDataScope } from "@/data/provider";
 import type { Dataset } from "@/data/types";
 import { categoryLabel } from "@/lib/categories";
 import { DESCRIPTION_MAX, TITLE_MAX, validateListingInput, type ListingErrors } from "@/lib/validate-listing";
 import { MIN_BILLS_TO_LIST } from "@/lib/constants";
 import { formatEth, plural } from "@/lib/format";
+import { categoriesDisclosure } from "@/lib/listing-categories";
+import { declaredCategories, useSessionBills } from "@/lib/session-bills";
 import { isBusy } from "@/lib/tx-machine";
 
 type FieldName = "title" | "description" | "price";
@@ -29,6 +32,13 @@ export default function ListDatasetPage() {
   const router = useRouter();
   const dataset = useDataset(id);
   const { state, run, reset } = useListDataset(id);
+  const scope = useDataScope();
+  // Re-renders when this tab records a bill; the categories are a pure read of that tab memory.
+  useSessionBills(scope.address, id);
+  const disclosure = categoriesDisclosure(
+    scope.source,
+    scope.address ? declaredCategories(scope.address, id, dataset.data?.billCount ?? 0) : [],
+  );
 
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -215,8 +225,12 @@ export default function ListDatasetPage() {
         footer={<TxStatus state={state} onRetry={onConfirm} />}
       >
         <p>Listing seals this dataset. You will not be able to add or remove bills afterwards.</p>
-        <p className="mt-3">
-          The listing also shows buyers which categories these bills cover, taken from the bills you added in this browser session.
+        <p
+          className={`mt-3 ${disclosure.known ? "" : "flex items-start gap-2 text-danger"}`}
+          data-testid="categories-disclosure"
+        >
+          {disclosure.known ? null : <AlertIcon className="mt-0.5 shrink-0" width={18} height={18} aria-hidden="true" />}
+          <span>{disclosure.text}</span>
         </p>
         {submitted ? <p className="mt-3 text-muted">Price {formatEth(submitted.priceWei)}</p> : null}
       </ConfirmDialog>
