@@ -57,3 +57,15 @@ export function clearSessionBills(): void {
   snapshots.clear();
   listeners.forEach((cb) => cb());
 }
+
+/**
+ * Categories to declare on a listing: these become public listing data. They are known only while
+ * this tab holds EVERY bill of the dataset, so a reload or bills added elsewhere means "unknown"
+ * (empty, mask 0). More rows than the chain count means stale rows (a node restart without a
+ * reload), which is also unknown.
+ */
+export function declaredCategories(address: string, datasetId: string, billCount: number): number[] {
+  const rows = getSessionBills(address, datasetId);
+  if (billCount <= 0 || rows.length !== billCount) return [];
+  return [...new Set(rows.map((r) => r.draft.category))].sort((a, b) => a - b);
+}

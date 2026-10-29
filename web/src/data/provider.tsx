@@ -1,11 +1,13 @@
 "use client";
 
 import { createContext, useCallback, useContext, useMemo, useSyncExternalStore, type ReactNode } from "react";
-import { useAccount } from "wagmi";
+import { useAccount, useConfig } from "wagmi";
 import { useQueryClient } from "@tanstack/react-query";
 import type { DataLayer } from "./data-layer";
 import type { DataScope, Hex } from "./types";
 import { createStubDataLayer, stubControls, type SeedMode } from "./stub";
+import { createLiveDataLayer } from "./live";
+import { resolveDataSource } from "./data-source";
 
 interface DataLayerContextValue {
   layer: DataLayer;
@@ -16,15 +18,20 @@ const DataLayerContext = createContext<DataLayerContextValue | null>(null);
 
 export function DataLayerProvider({ children }: { children: ReactNode }) {
   const { address, chainId } = useAccount();
+  const config = useConfig();
 
-  const value = useMemo<DataLayerContextValue>(
-    () => ({
-      // The single factory call that Phases 4 and 5 replace with the real chain-backed layer.
-      layer: createStubDataLayer({ address: address as Hex | undefined, chainId }),
-      scope: { address: address as Hex | undefined, chainId, source: "stub" },
-    }),
-    [address, chainId],
-  );
+  const value = useMemo<DataLayerContextValue>(() => {
+    const source = resolveDataSource(chainId);
+    const who = address as Hex | undefined;
+    return {
+      // The one switch between the mock marketplace and the real contracts. See data-source.ts.
+      layer:
+        source === "chain" && chainId !== undefined
+          ? createLiveDataLayer({ config, address: who, chainId })
+          : createStubDataLayer({ address: who, chainId }),
+      scope: { address: who, chainId, source },
+    };
+  }, [address, chainId, config]);
 
   return <DataLayerContext.Provider value={value}>{children}</DataLayerContext.Provider>;
 }

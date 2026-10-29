@@ -1,18 +1,37 @@
+import { MAX_BILLS_PER_DATASET, MIN_BILLS_TO_LIST } from "./constants";
 import type { TxErrorCode } from "./tx-machine";
 
 export const USER_REJECTED_REASON = "You rejected the request in your wallet.";
 export const WRONG_NETWORK_REASON = "Switch to Hardhat (chain 31337) to continue.";
+export const ENCRYPT_FAILED_REASON = "Encryption failed. Is the local node running?";
 const GENERIC_REASON = "Something went wrong. Try again.";
 const MAX_REASON_LENGTH = 160;
 
 /**
- * Readable reasons keyed by contract custom-error name. Phase 3 should name its custom errors to
- * match (AlreadyPurchased, OwnListing, PriceChanged), or Phase 5 extends this table.
+ * Readable reasons keyed by the contracts' custom-error name. The Marketplace ABI also carries the
+ * registry's errors, so a revert from either contract decodes here. InvalidMarketplace, NotDeployer,
+ * MarketplaceAlreadySet, OnlyMarketplace and NotSealed have no entry: they are deploy-time or internal.
  */
 export const REVERT_REASONS: Record<string, string> = {
   AlreadyPurchased: "You already own this dataset.",
   OwnListing: "You cannot buy your own listing.",
   PriceChanged: "The price changed. Reload the listing and try again.",
+  // Seller side (Phase 4).
+  TooFewBills: `Add at least ${MIN_BILLS_TO_LIST} bills before listing.`,
+  TooManyBills: `A dataset can hold at most ${MAX_BILLS_PER_DATASET} bills. List this one and start a new dataset.`,
+  DatasetIsSealed: "This dataset is sealed. Create a new dataset to add more bills.",
+  NotDatasetOwner: "You can only change your own datasets.",
+  DatasetNotFound: "Dataset not found.",
+  InvalidName: "Give your dataset a name (1 to 60 characters).",
+  InvalidTitle: "Give your listing a title (1 to 80 characters).",
+  DescriptionTooLong: "Keep the description to 300 characters or fewer.",
+  ZeroPrice: "Enter a price greater than 0 ETH.",
+  InvalidCategoryMask: "Choose valid categories.",
+  // Buyer side (Phase 5 may adjust the copy).
+  ListingNotFound: "Listing not found.",
+  WrongPayment: "The payment must equal the listing price exactly.",
+  NothingToWithdraw: "Nothing to withdraw yet.",
+  TransferFailed: "The transfer failed. Try again.",
 };
 
 /** An error whose message is already fit to show the user. The stub throws these. */
