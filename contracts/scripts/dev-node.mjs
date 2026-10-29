@@ -90,16 +90,40 @@ async function start() {
   fs.mkdirSync(scratch, { recursive: true });
   const out = fs.openSync(logFile, "w");
   const cli = path.join(contractsDir, "node_modules/hardhat/dist/src/cli.js");
+  if (!fs.existsSync(cli)) {
+    console.log("hardhat is not installed: " + cli + " is missing (run: npm --prefix contracts ci)");
+    return 1;
+  }
   const child = spawn(process.execPath, [cli, "node", "--hostname", "127.0.0.1"], {
     cwd: contractsDir,
     detached: true,
     stdio: ["ignore", out, out],
     windowsHide: true,
   });
+  // A failed spawn emits "error" (no listener would crash the script) and leaves child.pid undefined.
+  let spawnError = null;
+  let exited = null; // { code, signal } once the node process has ended
+  child.on("error", (err) => {
+    spawnError = err;
+  });
+  child.on("exit", (code, signal) => {
+    exited = { code, signal };
+  });
+  if (!child.pid) {
+    await sleep(50); // let the "error" event arrive so the message can name the cause
+    console.log("could not start the hardhat node: " + (spawnError ? spawnError.message : "spawn failed") + "; see " + logFile);
+    return 1;
+  }
   fs.writeFileSync(pidFile, String(child.pid));
   child.unref();
 
   for (let i = 0; i < 120; i++) {
+    if (spawnError || exited) {
+      fs.rmSync(pidFile, { force: true });
+      const why = spawnError ? spawnError.message : "exit code " + exited.code + (exited.signal ? ", signal " + exited.signal : "");
+      console.log("hardhat node exited before it came up (" + why + "); see " + logFile);
+      return 1;
+    }
     if ((await chainId()) === "0x7a69") {
       const code = await rpc("eth_getCode", [ACL_ADDRESS, "latest"]);
       if (!code || code === "0x") {
@@ -113,7 +137,9 @@ async function start() {
     }
     await sleep(1000);
   }
-  console.log("hardhat node did not come up in 120 s; see " + logFile);
+  killTree(child.pid);
+  fs.rmSync(pidFile, { force: true });
+  console.log("hardhat node did not come up in 120 s; stopped it; see " + logFile);
   return 1;
 }
 
