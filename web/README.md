@@ -155,4 +155,10 @@ Then restore the `deployedAt`-only change with `git checkout -- web/src/contract
 
 A stale-deployment banner (`src/components/DeploymentGuard.tsx`, text in `src/lib/deployment.ts`) says "The contracts are not on this chain" and makes the page inert when the committed addresses have no code, which is what a node restarted without a deploy looks like. It reads the code once per page load and shows nothing while a read is pending or failed. Off the local chain, event reads are chunked and a receipt waits for the RPC head (`src/data/live/logs.ts`, `waitForHead`; window from `NEXT_PUBLIC_LOG_CHUNK_BLOCKS`), and Sepolia reads poll every 12 s (`src/data/polling.ts`). The whole demo is proven by one command at the repo root, `node scripts/demo-rehearse.mjs` (add `--full --stale` for the whole suite and the banner; see `../README.md`).
 
+Accepted differences from before Phase 6 with `NEXT_PUBLIC_ENABLE_SEPOLIA` unset (the gate, badge, wagmi config, data source and SDK path are unchanged, and `src/lib/sepolia-flag.test.ts` proves that). These three are intended, not leftovers:
+
+1. In chain mode the footer shows the long "Local FHEVM mock..." honesty note instead of the bare product name. The golden path asserts it.
+2. `DeploymentGuard` wraps the page in one extra `<div data-testid="deployment-guarded" data-status="...">`, so `<main>` is one level deeper than before. The e2e scripts wait on `data-status="ok"`.
+3. Every chain-mode page load sends two extra `eth_getCode` calls (the registry and the marketplace) to the node and downloads their bytecode. That is how a restarted node is detected. A node that answers empty for a deployed address makes the app inert behind the danger banner on purpose.
+
 One known limit remains: Sepolia itself is unproven until the owner runs the root README runbook (LAND-03 pending).
