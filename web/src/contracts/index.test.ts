@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { AbiFunction, AbiParameter } from "viem";
 import { getDeployment } from "./index";
+import { deployments } from "./deployments";
 import { REVERT_REASONS } from "@/lib/tx-errors";
 
 // The live DataLayer reads these names. If a contract rename or a re-generated ABI drops one, this
@@ -30,7 +31,7 @@ describe("getDeployment", () => {
     expect(typeof d.deployBlock).toBe("bigint");
   });
   it("returns null for chains with no deployment", () => {
-    expect(getDeployment(11155111)).toBeNull();
+    expect(getDeployment(11155111) === null).toBe(!("11155111" in deployments));
     expect(getDeployment(1)).toBeNull();
   });
 });

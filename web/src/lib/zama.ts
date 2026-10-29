@@ -4,7 +4,8 @@
 // loaded with a dynamic import inside async functions, so the server never evaluates it.
 import type { PublicClient, WalletClient } from "viem";
 import type { ZamaSDK } from "@zama-fhe/sdk";
-import { HARDHAT_CHAIN_ID } from "./constants";
+import { SEPOLIA_CHAIN_ID } from "./constants";
+import { supportedChainIds } from "./network";
 import { LOCAL_CHAIN_ONLY_MESSAGE, WALLET_REQUIRED_MESSAGE } from "./tx-errors";
 
 // Public dev constants from @fhevm/host-contracts-cleartext (ts/cleartext-config.ts and
@@ -25,7 +26,7 @@ export type ZamaClients = { publicClient: PublicClient; walletClient: WalletClie
 let cached: { key: string; sdk: Promise<ZamaSDK> } | null = null;
 
 export async function getZamaSdk(chainId: number, clients: ZamaClients): Promise<ZamaSDK> {
-  if (chainId !== HARDHAT_CHAIN_ID) {
+  if (!supportedChainIds().includes(chainId)) {
     throw new Error(LOCAL_CHAIN_ONLY_MESSAGE);
   }
   const account = clients.walletClient.account?.address;
@@ -36,6 +37,27 @@ export async function getZamaSdk(chainId: number, clients: ZamaClients): Promise
   const previous = cached?.sdk;
   const sdk = (async () => {
     if (previous) (await previous.catch(() => null))?.terminate();
+    if (chainId === SEPOLIA_CHAIN_ID) {
+      // Real FHE. The sepolia preset carries every contract address and the relayer URL (no API key).
+      // The local override above must never be spread here: it holds dev signer keys, and the SDK
+      // blocks cleartext() on Sepolia anyway. The worker and WASM live inside the SDK. If the worker
+      // fails at runtime, the README fallback is web({ offloadEncrypt: false }).
+      const [{ ZamaSDK, memoryStorage }, { web }, { createConfig }, { sepolia }] = await Promise.all([
+        import("@zama-fhe/sdk"),
+        import("@zama-fhe/sdk/web"),
+        import("@zama-fhe/sdk/viem"),
+        import("@zama-fhe/sdk/chains"),
+      ]);
+      return new ZamaSDK(
+        createConfig({
+          chains: [sepolia],
+          publicClient: clients.publicClient,
+          walletClient: clients.walletClient,
+          storage: memoryStorage,
+          relayers: { [sepolia.id]: web() },
+        }),
+      );
+    }
     const [{ ZamaSDK, cleartext, memoryStorage }, { createConfig }, { hardhat }] = await Promise.all([
       import("@zama-fhe/sdk"),
       import("@zama-fhe/sdk/viem"),
