@@ -9,7 +9,9 @@
 //   8 regression: seller-ocr, seller-live and buyer-live, or the whole unfiltered e2e suite with --full
 //   9 (--stale only) restart the node WITHOUT a deploy and prove the stale-deployment banner
 // Always, at the end: stop the node this run started, restore a deployedAt-only change to the deployments files,
-// and restore web/next-env.d.ts when it was clean before the run.
+// and restore web/next-env.d.ts when it was clean before the run. The same cleanup runs on Ctrl+C (SIGINT) and
+// SIGTERM, after which the exit code is 130. Each child has a 20 minute limit; on a hang its whole process tree
+// is killed (taskkill /T on Windows) and the step fails.
 // Logs go to <repo>/.scratch/rehearsal-<timestamp>.log (git-ignored).
 import { spawn, spawnSync } from "node:child_process";
 import fs from "node:fs";
@@ -74,10 +76,47 @@ function childEnv() {
   return env;
 }
 
-/** Run `node <args>` and stream its output live (unprefixed). Resolves { code, out }. */
-function runNode(args, cwd = root) {
+const CHILD_TIMEOUT_MS = 20 * 60_000; // generous: the slowest measured child (the full e2e suite) takes about 4 minutes
+const CLEANUP_TIMEOUT_MS = 2 * 60_000;
+const isWindows = process.platform === "win32";
+const activeChildren = new Set();
+let interrupted = false;
+
+/** Kill a child and everything it started. Windows has no process groups, so taskkill /T walks the tree. */
+function killTree(child) {
+  if (!child.pid) return;
+  try {
+    if (isWindows) spawnSync("taskkill", ["/PID", String(child.pid), "/T", "/F"], { stdio: "ignore", windowsHide: true });
+    else process.kill(-child.pid, "SIGKILL"); // the child leads its own group (detached below)
+  } catch {
+    try {
+      child.kill("SIGKILL");
+    } catch {
+      /* already gone */
+    }
+  }
+}
+
+/**
+ * Run `node <args>` and stream its output live (unprefixed). Resolves { code, out }. A child that runs past
+ * timeoutMs is killed with its process tree and resolves with code 1. After an interrupt no new child is started
+ * unless it is the cleanup's own (cleanup: true).
+ */
+function runNode(args, cwd = root, { timeoutMs = CHILD_TIMEOUT_MS, cleanup = false } = {}) {
   return new Promise((resolve) => {
-    const child = spawn(process.execPath, args, { cwd, env: childEnv(), stdio: ["ignore", "pipe", "pipe"], windowsHide: true });
+    if (interrupted && !cleanup) return resolve({ code: 1, out: "" });
+    const child = spawn(process.execPath, args, {
+      cwd,
+      env: childEnv(),
+      stdio: ["ignore", "pipe", "pipe"],
+      windowsHide: true,
+      detached: !isWindows,
+    });
+    activeChildren.add(child);
+    const timer = setTimeout(() => {
+      onData(Buffer.from(`\nrehearse: child timed out after ${Math.round(timeoutMs / 60_000)} min, killing it: node ${path.basename(args[0])}\n`));
+      killTree(child);
+    }, timeoutMs);
     let out = "";
     const onData = (buf) => {
       const text = buf.toString("utf8");
@@ -86,11 +125,16 @@ function runNode(args, cwd = root) {
     };
     child.stdout.on("data", onData);
     child.stderr.on("data", onData);
+    const settle = (value) => {
+      clearTimeout(timer);
+      activeChildren.delete(child);
+      resolve(value);
+    };
     child.on("error", (err) => {
       onData(Buffer.from(`could not start node: ${err.message}\n`));
-      resolve({ code: 1, out });
+      settle({ code: 1, out });
     });
-    child.on("close", (code) => resolve({ code: code ?? 1, out }));
+    child.on("close", (code) => settle({ code: code ?? 1, out }));
   });
 }
 
@@ -143,6 +187,7 @@ let failure = null;
 
 async function step(n, name, fn) {
   const at = Date.now();
+  if (interrupted) throw new StepFailure(n, name, "interrupted");
   say(`step ${n}: ${name}`);
   try {
     await fn();
@@ -277,12 +322,13 @@ function restoreDeployments() {
   }
 }
 
-try {
-  await main();
-} catch (err) {
-  failure = err instanceof StepFailure ? err : new StepFailure(0, "unexpected", err instanceof Error ? err.message : String(err));
-} finally {
-  if (startedNode) await runNode([devNode, "stop"]);
+/** Stop the node this run started, restore the generated files. Runs once, however many callers ask. */
+let cleanupRun = null;
+const cleanup = () => (cleanupRun ??= doCleanup());
+async function doCleanup() {
+  for (const child of [...activeChildren]) killTree(child);
+  // An interrupt may land while a start is half done, so ask for a stop then too; it only touches a node this tooling started.
+  if (startedNode || interrupted) await runNode([devNode, "stop"], root, { timeoutMs: CLEANUP_TIMEOUT_MS, cleanup: true });
   try {
     restoreDeployments();
     if (envWasClean && git(["status", "--porcelain", "web/next-env.d.ts"]).stdout.trim() !== "") {
@@ -292,6 +338,32 @@ try {
   } catch (err) {
     say(`NOTE cleanup problem: ${err instanceof Error ? err.message : String(err)}`);
   }
+}
+
+// Ctrl+C or a termination: kill the running child, run the same cleanup, exit 130. A second signal exits at once.
+let signalled = false;
+for (const sig of ["SIGINT", "SIGTERM"]) {
+  process.on(sig, async () => {
+    if (signalled) process.exit(130);
+    signalled = true;
+    interrupted = true;
+    say(`interrupted (${sig}); cleaning up`);
+    await cleanup();
+    emit(`DEMO REHEARSAL INTERRUPTED (${sig})\n`);
+    process.exit(130);
+  });
+}
+
+try {
+  await main();
+} catch (err) {
+  failure = err instanceof StepFailure ? err : new StepFailure(0, "unexpected", err instanceof Error ? err.message : String(err));
+} finally {
+  await cleanup();
+}
+if (interrupted) {
+  emit("DEMO REHEARSAL INTERRUPTED\n");
+  process.exit(130);
 }
 
 say("step durations: " + durations.join(", "));
