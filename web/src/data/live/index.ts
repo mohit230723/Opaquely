@@ -257,19 +257,24 @@ export function createLiveDataLayer({ config, address, chainId }: LiveOptions): 
       const hashById = new Map(
         logs.map((l) => [String((l.args as { listingId: bigint }).listingId), l.transactionHash as Hex]),
       );
-      const out: Purchase[] = [];
-      for (const r of rows) {
-        const listing = await read<ChainListing>(d.market, "getListing", [r.listingId]);
-        out.push({
-          listingId: r.listingId.toString(),
-          title: listing.title,
-          seller: listing.seller,
-          priceWei: r.priceWei,
-          txHash: hashById.get(r.listingId.toString()) ?? ("0x" as Hex),
-          purchasedAt: toMs(r.purchasedAt),
-          hasAccess: true,
-        });
-      }
+      // Every purchasesByBuyer row is a purchase by this wallet: the contract sets the purchased flag in
+      // the same transaction that pushes the row, so hasAccess is true by construction here. The listing
+      // page still reads access per listing from Marketplace.hasAccess (MKT-08).
+      // The per-row listing reads are independent, so they run in parallel; Promise.all keeps row order.
+      const out: Purchase[] = await Promise.all(
+        rows.map(async (r) => {
+          const listing = await read<ChainListing>(d.market, "getListing", [r.listingId]);
+          return {
+            listingId: r.listingId.toString(),
+            title: listing.title,
+            seller: listing.seller,
+            priceWei: r.priceWei,
+            txHash: hashById.get(r.listingId.toString()) ?? ("0x" as Hex),
+            purchasedAt: toMs(r.purchasedAt),
+            hasAccess: true,
+          };
+        }),
+      );
       return out.reverse(); // newest first
     },
 
@@ -277,6 +282,9 @@ export function createLiveDataLayer({ config, address, chainId }: LiveOptions): 
       const d = need();
       const client = getPublicClient(config, { chainId });
       if (!client) return [];
+      // deployBlock is the only lower bound (never block 0). Purchase titles are joined from the Listed
+      // events of the same range. Public RPCs cap eth_getLogs ranges, so Sepolia (Phase 6) may need
+      // chunked queries.
       const common = { address: d.market.address, abi: d.market.abi, fromBlock: d.deployBlock } as const;
       const [listed, bought, withdrawn] = await Promise.all([
         client.getContractEvents({ ...common, eventName: "Listed" }),

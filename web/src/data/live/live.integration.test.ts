@@ -7,7 +7,7 @@ import { mock } from "wagmi/connectors";
 import { defineChain, getAddress, type Address } from "viem";
 import { hardhat } from "wagmi/chains";
 import { describe, expect, it } from "vitest";
-import { getPublicClient } from "wagmi/actions";
+import { getPublicClient, simulateContract } from "wagmi/actions";
 import { createLiveDataLayer } from "./index";
 import { getDeployment } from "@/contracts";
 import { toReadableError } from "@/lib/tx-errors";
@@ -20,6 +20,8 @@ import type { Hex } from "../types";
 const RPC = "http://127.0.0.1:8545";
 const SELLER = getAddress("0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266");
 const BUYER = getAddress("0x70997970C51812dc3A010C7d01b50e0d17dc79C8");
+// Hardhat #2: never buys anything, so its purchases stay empty on a reused node.
+const OUTSIDER = getAddress("0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC");
 const chain = defineChain({ ...hardhat, rpcUrls: { default: { http: [RPC] } } });
 
 const nodeUp = await fetch(RPC, {
@@ -158,4 +160,120 @@ describe.skipIf(!nodeUp)("live DataLayer against a hardhat node", () => {
     expect(kinds.slice(0, 3)).toEqual(["withdrawn", "purchased", "listed"]);
     expect(activity.find((e) => e.kind === "purchased")).toMatchObject({ title: "October household", amountWei: price, actor: BUYER });
   }, 120_000);
+
+  it("buyer side: browse, rejections, two purchases newest first, access per wallet, withdraw to the wallet, activity", async () => {
+    const d = getDeployment(31337)!;
+    const seller = await asWallet(SELLER);
+    const buyer = await asWallet(BUYER);
+    const outsider = await asWallet(OUTSIDER);
+    // Self-contained and delta-based, so it reruns on a used node.
+    const statsBefore = await seller.layer.getSellerStats();
+    const buyerRowsBefore = (await buyer.layer.listMyPurchases()).length;
+
+    const bills = [
+      { amountCents: 150780n, dateDays: day("2026-10-18"), category: 1 },
+      { amountCents: 332240n, dateDays: day("2026-10-12"), category: 0 },
+      { amountCents: 834550n, dateDays: day("2026-10-25"), category: 2 },
+    ];
+    // No recordSessionBill, so the declared category mask is 0.
+    async function listThree(name: string, title: string, priceWei: bigint) {
+      const ds = await confirm(seller.layer.createDataset({ name }));
+      for (const b of bills) await confirm(seller.layer.addBill(ds.createdId!, b));
+      const l = await confirm(seller.layer.listDataset(ds.createdId!, { title, description: "Phase 5 buyer test", priceWei }));
+      return { datasetId: ds.createdId!, listingId: l.createdId! };
+    }
+    const priceX = 2n * 10n ** 16n;
+    const priceY = 3n * 10n ** 16n;
+    const { datasetId: dsX, listingId: X } = await listThree("P5 dataset X", "Phase 5 X", priceX);
+    const { datasetId: dsY, listingId: Y } = await listThree("P5 dataset Y", "Phase 5 Y", priceY);
+
+    // Browse: newest first, undeclared categories, unknown or malformed ids are null
+    const all = await buyer.layer.listListings();
+    const idxX = all.findIndex((l) => l.id === X);
+    const idxY = all.findIndex((l) => l.id === Y);
+    expect(all[idxX]).toMatchObject({ title: "Phase 5 X", seller: SELLER, priceWei: priceX, recordCount: 3, categories: [] });
+    expect(all[idxY]).toMatchObject({ title: "Phase 5 Y", seller: SELLER, priceWei: priceY, recordCount: 3, categories: [] });
+    expect(idxY).toBeGreaterThanOrEqual(0);
+    expect(idxY).toBeLessThan(idxX);
+    expect(await buyer.layer.getListing("999999")).toBeNull();
+    expect(await buyer.layer.getListing("abc")).toBeNull();
+
+    // Rejections with readable reasons
+    expect(await failure(buyer.layer.buyListing("999999", priceX))).toBe("Listing not found.");
+    expect(await failure(seller.layer.buyListing(X, priceX))).toBe("You cannot buy your own listing.");
+    expect(await failure(buyer.layer.buyListing(X, priceX + 1n))).toBe("The price changed. Reload the listing and try again.");
+    // WrongPayment cannot come from the layer (it always sends value equal to the expected price), so simulate directly.
+    for (const value of [priceX + 1n, priceX - 1n]) {
+      let reason = "NO REVERT";
+      try {
+        await simulateContract(buyer.config, {
+          address: d.market.address,
+          abi: d.market.abi,
+          functionName: "buyListing",
+          args: [BigInt(X), priceX],
+          value,
+          account: BUYER,
+          chainId: 31337,
+        } as never);
+      } catch (e) {
+        reason = toReadableError(e).reason;
+      }
+      expect(reason).toBe("The payment must equal the listing price exactly.");
+    }
+
+    // Access before
+    for (const w of [buyer, outsider, seller]) expect(await w.layer.hasAccess(X)).toBe(false);
+
+    // Buy both
+    const hX = (await confirm(buyer.layer.buyListing(X, priceX))).hash;
+    const hY = (await confirm(buyer.layer.buyListing(Y, priceY))).hash;
+
+    // Access after: only the purchaser
+    expect(await buyer.layer.hasAccess(X)).toBe(true);
+    expect(await buyer.layer.hasAccess(Y)).toBe(true);
+    expect(await outsider.layer.hasAccess(X)).toBe(false);
+    expect(await outsider.layer.hasAccess(Y)).toBe(false);
+    expect(await seller.layer.hasAccess(X)).toBe(false);
+    expect(await failure(buyer.layer.buyListing(X, priceX))).toBe("You already own this dataset.");
+
+    // Purchases, newest first, with the exact tx hashes
+    const rows = await buyer.layer.listMyPurchases();
+    expect(rows).toHaveLength(buyerRowsBefore + 2);
+    expect(rows[0]).toMatchObject({ listingId: Y, title: "Phase 5 Y", seller: SELLER, priceWei: priceY, txHash: hY, hasAccess: true });
+    expect(rows[1]).toMatchObject({ listingId: X, title: "Phase 5 X", seller: SELLER, priceWei: priceX, txHash: hX, hasAccess: true });
+    expect(rows[0].purchasedAt).toBeGreaterThanOrEqual(rows[1].purchasedAt);
+    expect(await outsider.layer.listMyPurchases()).toEqual([]);
+
+    // Seller dashboard
+    const mine = await seller.layer.listMyDatasets();
+    expect(mine.find((x) => x.id === dsX)).toMatchObject({ status: "listed", billCount: 3, listingId: X });
+    expect(mine.find((x) => x.id === dsY)).toMatchObject({ status: "listed", billCount: 3, listingId: Y });
+    const pending = statsBefore.withdrawableWei + priceX + priceY;
+    expect(await seller.layer.getSellerStats()).toMatchObject({
+      listings: statsBefore.listings + 2,
+      sales: statsBefore.sales + 2,
+      withdrawableWei: pending,
+    });
+
+    // Withdraw moves exactly the pending amount to the wallet
+    const pc = getPublicClient(seller.config, { chainId: 31337 })!;
+    const bal0 = await pc.getBalance({ address: SELLER });
+    const w = await confirm(seller.layer.withdraw());
+    const rc = await pc.getTransactionReceipt({ hash: w.hash });
+    const bal1 = await pc.getBalance({ address: SELLER });
+    expect(bal1 - bal0 + rc.gasUsed * rc.effectiveGasPrice).toBe(pending);
+    expect((await seller.layer.getSellerStats()).withdrawableWei).toBe(0n);
+    expect(await failure(seller.layer.withdraw())).toBe("Nothing to withdraw yet.");
+
+    // Activity is global and newest first
+    const a = await outsider.layer.listActivity();
+    const top = a.slice(0, 5);
+    expect(top.map((e) => e.kind)).toEqual(["withdrawn", "purchased", "purchased", "listed", "listed"]);
+    expect(a[0]).toMatchObject({ actor: SELLER, amountWei: pending, txHash: w.hash });
+    expect(a[1]).toMatchObject({ listingId: Y, title: "Phase 5 Y", actor: BUYER, amountWei: priceY, txHash: hY });
+    expect(a[2]).toMatchObject({ listingId: X, title: "Phase 5 X", actor: BUYER, amountWei: priceX, txHash: hX });
+    expect(a[3]).toMatchObject({ listingId: Y, title: "Phase 5 Y" });
+    expect(a[4]).toMatchObject({ listingId: X, title: "Phase 5 X" });
+    for (let i = 1; i < top.length; i++) expect(top[i].at).toBeLessThanOrEqual(top[i - 1].at);
+  }, 180_000);
 });

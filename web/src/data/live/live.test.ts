@@ -103,3 +103,44 @@ describe("live layer", () => {
     });
   });
 });
+
+describe("listMyPurchases", () => {
+  it("listMyPurchases reads every listing in parallel and returns newest first", async () => {
+    const hashA = `0x${"11".repeat(31)}aa`;
+    const hashB = `0x${"22".repeat(31)}bb`;
+    const pending = new Map<string, (v: unknown) => void>();
+    mocked(readContract).mockImplementation((_config: unknown, params: { functionName: string; args: unknown[] }) => {
+      if (params.functionName === "purchasesByBuyer") {
+        return Promise.resolve([
+          { listingId: 1n, priceWei: 10n, purchasedAt: 100n },
+          { listingId: 2n, priceWei: 20n, purchasedAt: 200n },
+        ]);
+      }
+      if (params.functionName === "getListing") {
+        return new Promise((resolve) => pending.set(String(params.args[0]), resolve));
+      }
+      return Promise.reject(new Error("unexpected read " + params.functionName));
+    });
+    mocked(getPublicClient).mockReturnValue({
+      getContractEvents: vi.fn().mockResolvedValue([
+        { args: { listingId: 1n }, transactionHash: hashA },
+        { args: { listingId: 2n }, transactionHash: hashB },
+      ]),
+    });
+
+    const result = layer().listMyPurchases();
+    await new Promise((r) => setTimeout(r, 0));
+    // both getListing reads are in flight before either one resolved
+    const listingReads = mocked(readContract).mock.calls.filter(
+      (c) => (c[1] as { functionName: string }).functionName === "getListing",
+    );
+    expect(listingReads).toHaveLength(2);
+    pending.get("1")!({ id: 1n, seller: SELLER, title: "One" });
+    pending.get("2")!({ id: 2n, seller: SELLER, title: "Two" });
+
+    const rows = await result;
+    expect(rows).toHaveLength(2);
+    expect(rows[0]).toMatchObject({ listingId: "2", title: "Two", seller: SELLER, priceWei: 20n, txHash: hashB, purchasedAt: 200000, hasAccess: true });
+    expect(rows[1]).toMatchObject({ listingId: "1", title: "One", txHash: hashA, purchasedAt: 100000, hasAccess: true });
+  });
+});
