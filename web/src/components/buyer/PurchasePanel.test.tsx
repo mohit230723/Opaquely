@@ -17,7 +17,7 @@ vi.mock("@/data/hooks", () => ({
   useBuyListing: () => ({ state: { phase: "idle" }, run: () => Promise.resolve(), reset: () => {} }),
 }));
 
-import { PurchasePanel } from "./PurchasePanel";
+import { PurchasePanel, panelKey } from "./PurchasePanel";
 
 const LISTING: Listing = {
   id: "7",
@@ -75,5 +75,25 @@ describe("PurchasePanel access states", () => {
     const html = render();
     expect(html).toContain("Buy dataset");
     expect(html).not.toContain("Could not check your access.");
+  });
+});
+
+describe("PurchasePanel wallet switch (WR-02)", () => {
+  it("keys the panel by wallet and listing so a wallet switch remounts it", () => {
+    mocks.account.address = BUYER;
+    const first = PurchasePanel({ listing: LISTING });
+    mocks.account.address = SELLER;
+    const second = PurchasePanel({ listing: LISTING });
+    expect(first.key).toBe(`${BUYER}:7`);
+    expect(second.key).toBe(`${SELLER}:7`);
+    expect(first.key).not.toBe(second.key);
+    // Same wallet, same listing: same identity, so polling never remounts the panel.
+    mocks.account.address = BUYER;
+    expect(PurchasePanel({ listing: LISTING }).key).toBe(first.key);
+  });
+
+  it("changes the key when the listing changes and has a stable key without a wallet", () => {
+    expect(panelKey(BUYER, "7")).not.toBe(panelKey(BUYER, "8"));
+    expect(panelKey(undefined, "7")).toBe("none:7");
   });
 });

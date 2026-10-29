@@ -16,8 +16,23 @@ import { BUYER_CAN_DECRYPT, DECRYPT_COMING_LABEL, DECRYPT_HELPER } from "@/lib/c
 import { formatEth, shortAddress } from "@/lib/format";
 import { isBusy } from "@/lib/tx-machine";
 
-/** Price, the buy confirmation, and the own-listing and access-granted states. */
+/** Identity of one panel: a wallet looking at one listing. */
+export function panelKey(address: string | undefined, listingId: string): string {
+  return `${address ?? "none"}:${listingId}`;
+}
+
+/**
+ * Price, the buy confirmation, and the own-listing and access-granted states. The inner panel is keyed by
+ * wallet and listing, so switching account remounts it: an open dialog, a "Transaction confirmed" or a
+ * failure from the previous wallet cannot carry over, and "Pay" can never send from a wallet other than
+ * the one that opened the dialog.
+ */
 export function PurchasePanel({ listing }: { listing: Listing }) {
+  const { address } = useAccount();
+  return <PurchasePanelInner key={panelKey(address, listing.id)} listing={listing} />;
+}
+
+function PurchasePanelInner({ listing }: { listing: Listing }) {
   const router = useRouter();
   const { address } = useAccount();
   const access = useHasAccess(listing.id);
