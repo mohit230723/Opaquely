@@ -1,25 +1,19 @@
 "use client";
 
+import Link from "next/link";
 import { useAccount } from "wagmi";
-import { useMyDatasets } from "@/data/hooks";
-import type { DatasetStatus } from "@/data/types";
+import { useMyDatasets, useSellerStats } from "@/data/hooks";
 import { AsyncBoundary } from "@/components/AsyncBoundary";
 import { EmptyState } from "@/components/EmptyState";
 import { PageShell } from "@/components/PageShell";
 import { Skeleton } from "@/components/Skeleton";
 import { Button } from "@/components/ui/Button";
-import { Card } from "@/components/ui/Card";
-import { StatusChip, type StatusChipVariant } from "@/components/ui/StatusChip";
-import { formatDate, plural } from "@/lib/format";
-
-const STATUS: Record<DatasetStatus, { label: string; variant: StatusChipVariant }> = {
-  open: { label: "Open", variant: "neutral" },
-  sealed: { label: "Sealed", variant: "info" },
-  listed: { label: "Listed", variant: "success" },
-};
+import { DatasetList } from "@/components/seller/DatasetList";
+import { SellerStats, SellerStatsSkeleton } from "@/components/seller/SellerStats";
 
 export default function SellerHomePage() {
   const { address } = useAccount();
+  const stats = useSellerStats();
   const datasets = useMyDatasets();
 
   return (
@@ -27,39 +21,46 @@ export default function SellerHomePage() {
       {!address ? (
         <p className="text-muted">Connect your wallet to continue.</p>
       ) : (
-        <AsyncBoundary
-          query={datasets}
-          thing="datasets"
-          skeleton={
-            <div className="flex flex-col gap-4">
-              <Skeleton className="h-24 w-full" />
-              <Skeleton className="h-24 w-full" />
-              <Skeleton className="h-24 w-full" />
+        <div className="flex flex-col gap-10">
+          <AsyncBoundary query={stats} thing="seller stats" skeleton={<SellerStatsSkeleton />}>
+            {(data) => <SellerStats stats={data} />}
+          </AsyncBoundary>
+
+          <section aria-labelledby="recent-datasets">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <h2 id="recent-datasets" className="text-lg font-semibold">
+                Recent datasets
+              </h2>
+              <Link
+                href="/sell/datasets"
+                className="inline-flex min-h-11 items-center rounded-lg border border-border-strong px-4 text-base font-semibold text-text hover:bg-surface-raised"
+              >
+                View all datasets
+              </Link>
             </div>
-          }
-          isEmpty={(rows) => rows.length === 0}
-          empty={
-            <EmptyState heading="No datasets yet" action={{ label: "Create dataset", href: "/sell/datasets/new" }}>
-              Create a dataset to start adding bills.
-            </EmptyState>
-          }
-        >
-          {(rows) => (
-            <ul className="flex flex-col gap-4">
-              {rows.map((d) => (
-                <Card as="li" key={d.id} className="flex flex-wrap items-center justify-between gap-4">
-                  <div className="min-w-0">
-                    <p className="text-base font-semibold wrap-break-word">{d.name}</p>
-                    <p className="text-sm text-muted">
-                      {plural(d.billCount, "bill")} · {formatDate(d.createdAt)}
-                    </p>
+            <div className="mt-4">
+              <AsyncBoundary
+                query={datasets}
+                thing="datasets"
+                skeleton={
+                  <div className="flex flex-col gap-4">
+                    <Skeleton className="h-24 w-full" />
+                    <Skeleton className="h-24 w-full" />
+                    <Skeleton className="h-24 w-full" />
                   </div>
-                  <StatusChip variant={STATUS[d.status].variant}>{STATUS[d.status].label}</StatusChip>
-                </Card>
-              ))}
-            </ul>
-          )}
-        </AsyncBoundary>
+                }
+                isEmpty={(rows) => rows.length === 0}
+                empty={
+                  <EmptyState heading="No datasets yet" action={{ label: "Create dataset", href: "/sell/datasets/new" }}>
+                    Create a dataset to start adding bills.
+                  </EmptyState>
+                }
+              >
+                {(rows) => <DatasetList datasets={rows} limit={3} />}
+              </AsyncBoundary>
+            </div>
+          </section>
+        </div>
       )}
     </PageShell>
   );
