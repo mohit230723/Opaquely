@@ -1,6 +1,7 @@
 "use client";
 
 import { getAddress, type Address, type Hex } from "viem";
+import { WALLET_REQUIRED_MESSAGE } from "./tx-errors";
 import { getZamaSdk, type ZamaClients } from "./zama";
 
 export type EncryptedAmount = { handle: Hex; inputProof: Hex };
@@ -19,7 +20,7 @@ export async function encryptUint64(
 ): Promise<EncryptedAmount> {
   const sdk = await getFhevm(chainId, clients);
   const userAddress = clients.walletClient.account?.address;
-  if (!userAddress) throw new Error("Connect a wallet first");
+  if (!userAddress) throw new Error(WALLET_REQUIRED_MESSAGE);
   // The relayer rejects non-checksummed addresses.
   const enc = await sdk.encrypt({
     values: [{ value, type: "euint64" }],
@@ -44,7 +45,7 @@ export async function encryptBill(
 ): Promise<EncryptedBill> {
   const sdk = await getFhevm(chainId, clients);
   const userAddress = clients.walletClient.account?.address;
-  if (!userAddress) throw new Error("Connect a wallet first");
+  if (!userAddress) throw new Error(WALLET_REQUIRED_MESSAGE);
   const enc = await sdk.encrypt({
     values: [
       { value: bill.amountCents, type: "euint64" },

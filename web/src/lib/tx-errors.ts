@@ -4,6 +4,9 @@ import type { TxErrorCode } from "./tx-machine";
 export const USER_REJECTED_REASON = "You rejected the request in your wallet.";
 export const WRONG_NETWORK_REASON = "Switch to Hardhat (chain 31337) to continue.";
 export const ENCRYPT_FAILED_REASON = "Encryption failed. Is the local node running?";
+/** Messages thrown by the encrypt path itself (fhe.ts, zama.ts). They hold no user data, so they may be matched. */
+export const WALLET_REQUIRED_MESSAGE = "Connect a wallet first";
+export const LOCAL_CHAIN_ONLY_MESSAGE = "FHE is only wired for the local Hardhat chain (31337) in Phase 2";
 const GENERIC_REASON = "Something went wrong. Try again.";
 const MAX_REASON_LENGTH = 160;
 
@@ -36,6 +39,17 @@ export const REVERT_REASONS: Record<string, string> = {
   NothingToWithdraw: "Nothing to withdraw yet.",
   TransferFailed: "The transfer failed. Try again.",
 };
+
+/**
+ * The reason shown when encrypting a bill fails. Only two known, data-free causes get their own text;
+ * everything else gets the generic reason, never the SDK's message (it could echo the values).
+ */
+export function encryptFailureReason(e: unknown): string {
+  const message = e instanceof Error ? e.message : "";
+  if (message === WALLET_REQUIRED_MESSAGE) return "Connect your wallet to continue.";
+  if (message === LOCAL_CHAIN_ONLY_MESSAGE) return WRONG_NETWORK_REASON;
+  return ENCRYPT_FAILED_REASON;
+}
 
 /** An error whose message is already fit to show the user. The stub throws these. */
 export class ReadableTxError extends Error {

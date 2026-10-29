@@ -5,6 +5,7 @@
 import type { PublicClient, WalletClient } from "viem";
 import type { ZamaSDK } from "@zama-fhe/sdk";
 import { HARDHAT_CHAIN_ID } from "./constants";
+import { LOCAL_CHAIN_ONLY_MESSAGE, WALLET_REQUIRED_MESSAGE } from "./tx-errors";
 
 // Public dev constants from @fhevm/host-contracts-cleartext (ts/cleartext-config.ts and
 // ts/signers/defaultCoprocessorSigners.ts). Local mock only, never real keys.
@@ -25,10 +26,10 @@ let cached: { key: string; sdk: Promise<ZamaSDK> } | null = null;
 
 export async function getZamaSdk(chainId: number, clients: ZamaClients): Promise<ZamaSDK> {
   if (chainId !== HARDHAT_CHAIN_ID) {
-    throw new Error("FHE is only wired for the local Hardhat chain (31337) in Phase 2");
+    throw new Error(LOCAL_CHAIN_ONLY_MESSAGE);
   }
   const account = clients.walletClient.account?.address;
-  if (!account) throw new Error("Connect a wallet first");
+  if (!account) throw new Error(WALLET_REQUIRED_MESSAGE);
   const key = `${chainId}:${account.toLowerCase()}`;
   if (cached?.key === key) return cached.sdk;
 

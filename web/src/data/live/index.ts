@@ -18,7 +18,7 @@ import { getDeployment, type Deployment } from "@/contracts";
 import { CATEGORIES, isCategoryId } from "@/lib/categories";
 import { encryptBill } from "@/lib/fhe";
 import { declaredCategories } from "@/lib/session-bills";
-import { ENCRYPT_FAILED_REASON, ReadableTxError, WRONG_NETWORK_REASON } from "@/lib/tx-errors";
+import { ReadableTxError, WRONG_NETWORK_REASON, encryptFailureReason } from "@/lib/tx-errors";
 import type { DataLayer } from "../data-layer";
 import type {
   ActivityEvent,
@@ -351,9 +351,9 @@ export function createLiveDataLayer({ config, address, chainId }: LiveOptions): 
       let enc: Awaited<ReturnType<typeof encryptBill>>;
       try {
         enc = await encryptBill(chainId, { publicClient, walletClient } as never, d.registry.address, bill);
-      } catch {
+      } catch (e) {
         // Never embed the original message: SDK text could echo the values being encrypted.
-        throw new ReadableTxError(ENCRYPT_FAILED_REASON);
+        throw new ReadableTxError(encryptFailureReason(e));
       }
       const hash = await send(d.registry, "addRecord", [id, enc.amount, enc.category, enc.date, enc.inputProof]);
       return handle(hash);

@@ -1,10 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
   ENCRYPT_FAILED_REASON,
+  LOCAL_CHAIN_ONLY_MESSAGE,
   REVERT_REASONS,
   ReadableTxError,
   USER_REJECTED_REASON,
+  WALLET_REQUIRED_MESSAGE,
   WRONG_NETWORK_REASON,
+  encryptFailureReason,
   toReadableError,
 } from "./tx-errors";
 import { getDeployment } from "@/contracts";
@@ -160,5 +163,19 @@ describe("REVERT_REASONS covers the Marketplace ABI", () => {
     expect(REVERT_REASONS.WrongPayment).toBe("The payment must equal the listing price exactly.");
     expect(REVERT_REASONS.NothingToWithdraw).toBe("Nothing to withdraw yet.");
     expect(REVERT_REASONS.TransferFailed).toBe("The transfer failed. Try again.");
+  });
+});
+
+describe("encryptFailureReason (IN-01)", () => {
+  it("names a missing wallet and a wrong chain, from the messages the encrypt path throws", () => {
+    expect(encryptFailureReason(new Error(WALLET_REQUIRED_MESSAGE))).toBe("Connect your wallet to continue.");
+    expect(encryptFailureReason(new Error(LOCAL_CHAIN_ONLY_MESSAGE))).toBe(WRONG_NETWORK_REASON);
+  });
+
+  it("falls back to the generic reason for anything else, never echoing the text", () => {
+    const reason = encryptFailureReason(new Error("relayer said 150780 is bad"));
+    expect(reason).toBe(ENCRYPT_FAILED_REASON);
+    expect(reason).not.toContain("150780");
+    expect(encryptFailureReason("a string")).toBe(ENCRYPT_FAILED_REASON);
   });
 });
