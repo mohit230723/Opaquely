@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { prewarmOcr, recognizeBill, terminateOcr } from "./ocr";
 import { parseReceiptText, type ParsedReceipt } from "./parse-receipt";
+import { isEmptyParse } from "./prefill";
 import { todayInputValue } from "./validate-bill";
 
 export type OcrState =
@@ -43,7 +44,13 @@ export function useBillOcr(onParsed: (parsed: ParsedReceipt) => void) {
         if (runRef.current === id) setState({ phase: "running", status: p.status, progress: p.progress });
       });
       if (runRef.current !== id) return;
-      onParsedRef.current(parseReceiptText(text, todayInputValue(new Date())));
+      const parsed = parseReceiptText(text, todayInputValue(new Date()));
+      if (isEmptyParse(parsed)) {
+        // Nothing usable (blank or unreadable image): leave the form exactly as the seller has it.
+        setState({ phase: "failed", reason: OCR_FAILED_REASON });
+        return;
+      }
+      onParsedRef.current(parsed);
       setState({ phase: "done" });
     } catch {
       if (runRef.current === id) setState({ phase: "failed", reason: OCR_FAILED_REASON });

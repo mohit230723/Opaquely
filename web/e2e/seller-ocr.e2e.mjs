@@ -47,6 +47,12 @@ export default async function sellerOcr({ baseUrl, accounts, assert, waitForWall
   await page.getByLabel("Total amount").fill("8,300.00");
   assert((await page.getByLabel("Total amount").inputValue()) === "8,300.00", "manual correction");
 
+  // A third read (WR-03) must not wipe what the seller corrected: the amount stays, the untouched fields follow the new bill.
+  await page.getByRole("button", { name: "Grocery" }).click();
+  await page.waitForFunction(() => document.querySelector('input[name="date"]')?.value === "2026-10-18", null, T);
+  assert((await page.getByLabel("Total amount").inputValue()) === "8,300.00", "typed amount survives a later OCR run");
+  assert((await page.getByLabel("Vendor (optional)").inputValue()) === "SHREE GANESH SUPER MART", "untouched vendor follows the new bill");
+
   // Privacy and self-hosting.
   const dbs = await page.evaluate(async () => (indexedDB.databases ? (await indexedDB.databases()).map((d) => d.name) : []));
   // Wallet libraries own WALLET_CONNECT_V2_INDEXED_DB and base-acc-sdk. tesseract.js would add idb-keyval's

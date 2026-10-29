@@ -7,6 +7,7 @@ import { ChipGroup } from "@/components/ui/ChipToggle";
 import { Field } from "@/components/ui/Field";
 import { CATEGORIES } from "@/lib/categories";
 import { BILL_CURRENCY_SYMBOL } from "@/lib/constants";
+import { mergePrefill } from "@/lib/prefill";
 import {
   VENDOR_MAX,
   todayInputValue,
@@ -21,8 +22,11 @@ export interface BillReviewFormProps {
   busy?: boolean;
   /** Change this value to clear the form (for example after "Add another bill"). */
   resetKey?: number | string;
-  /** Pre-fills the fields (OCR). Read once per mount, so change resetKey together with it. */
-  initial?: BillFormFields;
+  /**
+   * An OCR suggestion. Each new `n` is merged into the form without remounting it: only fields that are
+   * empty, or still hold the previous suggestion, take the new values. What the seller typed is kept.
+   */
+  suggestion?: { n: number; fields: BillFormFields };
 }
 
 type FieldName = keyof BillFormFields;
@@ -34,12 +38,29 @@ const EMPTY: BillFormFields = { vendor: "", amount: "", date: "", category: null
  * empty. Values live in component state only: no storage, no logging, no URL params.
  * The inner form is keyed by resetKey, so changing the key mounts a fresh, empty form.
  */
-export function BillReviewForm({ onSubmit, busy = false, resetKey = 0, initial }: BillReviewFormProps) {
-  return <ReviewFormBody key={resetKey} onSubmit={onSubmit} busy={busy} initial={initial} />;
+export function BillReviewForm({ onSubmit, busy = false, resetKey = 0, suggestion }: BillReviewFormProps) {
+  return <ReviewFormBody key={resetKey} onSubmit={onSubmit} busy={busy} suggestion={suggestion} />;
 }
 
-function ReviewFormBody({ onSubmit, busy, initial }: { onSubmit: (draft: BillDraft) => void; busy: boolean; initial?: BillFormFields }) {
-  const [fields, setFields] = useState<BillFormFields>(initial ?? EMPTY);
+function ReviewFormBody({
+  onSubmit,
+  busy,
+  suggestion,
+}: {
+  onSubmit: (draft: BillDraft) => void;
+  busy: boolean;
+  suggestion?: BillReviewFormProps["suggestion"];
+}) {
+  const [fields, setFields] = useState<BillFormFields>(EMPTY);
+  // What the OCR suggestions put in the form, so a later one can tell untouched fields from typed ones.
+  const [applied, setApplied] = useState<BillFormFields>(EMPTY);
+  const [seenSuggestion, setSeenSuggestion] = useState(suggestion?.n ?? 0);
+  if (suggestion && suggestion.n !== seenSuggestion) {
+    setSeenSuggestion(suggestion.n);
+    const merged = mergePrefill(fields, suggestion.fields, applied);
+    setFields(merged.fields);
+    setApplied(merged.applied);
+  }
   // A field's error shows once it has been left (blur) or a submit was attempted; after that it
   // follows the value, so fixing the field clears the message right away.
   const [shown, setShown] = useState<ReadonlySet<FieldName>>(new Set());

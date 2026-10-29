@@ -159,7 +159,7 @@ function AddBillScreen({ datasetId, billCount }: { datasetId: string; billCount:
               </div>
             </div>
           ) : (
-            <BillReviewForm onSubmit={submit} busy={busy} resetKey={`${resetKey}-${prefill?.n ?? 0}`} initial={prefill?.fields} />
+            <BillReviewForm onSubmit={submit} busy={busy} resetKey={resetKey} suggestion={prefill} />
           )}
           <TxStatus
             state={state}
