@@ -3,6 +3,8 @@
 // fhe-spike, seller-live and buyer-live need `hardhat node` on 127.0.0.1:8545 (seller-live and buyer-live also
 // need the contracts deployed). Each runs when you name it (and then fails if no node answers) or in an
 // unfiltered run when a node is up; an unfiltered run with no node skips all three.
+// demo-rehearsal (Phase 6) also needs the node and the contracts deployed, and it should run first on a freshly
+// deployed chain: scripts/demo-rehearse.mjs does that. It is delta-based, so it also passes on a used node.
 import { spawn } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
@@ -14,7 +16,7 @@ const webDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const e2eDir = path.join(webDir, "e2e");
 
 // Scripts that need `hardhat node` on 127.0.0.1:8545. An unfiltered run skips them when no node answers.
-const NEEDS_NODE = new Set(["fhe-spike", "seller-live", "buyer-live"]);
+const NEEDS_NODE = new Set(["fhe-spike", "seller-live", "buyer-live", "demo-rehearsal"]);
 
 // ---- args ----
 const argv = process.argv.slice(2);
