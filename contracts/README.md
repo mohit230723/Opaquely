@@ -104,4 +104,10 @@ npm run node:stop
 
 - The dataset name, listing title, description and the seller-declared `categoryMask` are public plaintext. The mask is unverified.
 - A category that holds exactly one bill has a total equal to that bill's amount. This is accepted for the demo (threat T-03-13).
+- **Aggregates can reveal exact bill amounts (review WR-01, open decision).** The buyer decrypts 9 exact aggregates, and in small or sparse datasets those are not an aggregate in any useful sense:
+  - With 6 fixed categories, a dataset of 3 bills in 3 different categories gives the buyer all three amounts exactly through `categoryTotals`. Any category with a single bill equals that bill.
+  - A category with one bill also leaks that bill's anomaly status through `anomalyCount` and `recordCount`.
+  - `anomalyCount == 0` or `anomalyCount == recordCount` pins every bill in the dataset below or above the threshold.
+  - `MIN_BILLS_TO_LIST` (3) is a minimum row count, not k-anonymity or any differential-privacy guarantee. It does not stop the cases above, and it should not be described to sellers or buyers as a privacy floor.
+  - The contract logic was deliberately not changed. Options when the owner decides: keep an encrypted per-category bill count and show the buyer `FHE.select(count_k >= K, total_k, 0)` with the raw totals seller-only, raise `MIN_BILLS_TO_LIST`, add a per-category minimum, or state the limit plainly in the seller listing form and the demo script.
 - On the local node the cleartext mock sees input values. The UI labels it "Local FHEVM mock"; it is not real FHE.
