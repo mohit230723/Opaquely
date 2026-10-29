@@ -77,6 +77,13 @@ describe("stub data layer", () => {
 });
 
 describe("stub createDataset", () => {
+  it("never gives a dataset the id 'new', which is the create-form route", async () => {
+    const layer = createStubDataLayer({ address: SELLER, chainId: 31337, latency: FAST_TX });
+    const receipt = await (await layer.createDataset({ name: "New" })).wait();
+    expect(receipt.createdId).not.toBe("new");
+    expect(receipt.createdId).toBe("new-dataset");
+  });
+
   it("resolves a handle, mutates only after wait(), and returns createdId in the receipt", async () => {
     const layer = createStubDataLayer({ address: SELLER, chainId: 31337, latency: FAST_TX });
     const handle = await layer.createDataset({ name: "  My new set  " });

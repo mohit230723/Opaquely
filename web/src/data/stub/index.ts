@@ -36,6 +36,8 @@ function slugify(name: string): string {
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "");
+  // "new" is the create-form route segment, so a dataset with that id would be unreachable.
+  if (slug === "new") return "new-dataset";
   return slug || "dataset";
 }
 
