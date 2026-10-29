@@ -1,10 +1,12 @@
-// Cold-start rehearsal of the whole local demo. Run from anywhere:  node scripts/demo-rehearse.mjs [--port N]
+// Cold-start rehearsal of the whole local demo. Run from anywhere:
+//   node scripts/demo-rehearse.mjs [--port N] [--skip-build] [--full]      (--help prints the flags)
 // Plain Node ESM with only node: imports, so it needs no install. It never uses npm or a shell: every child
 // is started with process.execPath, so it behaves the same on Windows and Linux.
 //
 // Steps (the first failure stops the run with "DEMO REHEARSAL FAILED at step N (name): reason"):
 //   1 preflight   2 stop the node THIS tooling started   3 cold start   4 compile and deploy   5 verify the deploy
-//   6 build       7 golden path (demo-rehearsal e2e) on the clean chain
+//   6 build (or reuse of this script's own build with --skip-build)   7 golden path (demo-rehearsal e2e) on the clean chain
+//   8 regression: seller-ocr, seller-live and buyer-live, or the whole unfiltered e2e suite with --full
 // Always, at the end: stop the node this run started, restore a deployedAt-only change to the deployments files,
 // and restore web/next-env.d.ts when it was clean before the run.
 // Logs go to <repo>/.scratch/rehearsal-<timestamp>.log (git-ignored).
@@ -19,13 +21,26 @@ const contractsDir = path.join(root, "contracts");
 const scratch = path.join(root, ".scratch");
 const RPC = "http://127.0.0.1:8545";
 
-const USAGE = "usage: node scripts/demo-rehearse.mjs [--port N]";
+const USAGE = [
+  "usage: node scripts/demo-rehearse.mjs [--port N] [--skip-build] [--full]",
+  "  --port N       port for the test web server (default 3180)",
+  "  --skip-build   reuse web/.next only if THIS script built it and it holds the deployed registry address",
+  "  --full         after the golden path run the whole unfiltered e2e suite, not just the demo scripts",
+  "  --help         print this text",
+].join("\n");
 
 // ---- args ----
 const argv = process.argv.slice(2);
 let port = 3180;
+let skipBuild = false;
+let full = false;
 for (let i = 0; i < argv.length; i++) {
-  if (argv[i] === "--port" && /^\d+$/.test(argv[i + 1] ?? "")) port = Number(argv[++i]);
+  if (argv[i] === "--help") {
+    console.log(USAGE);
+    process.exit(0);
+  } else if (argv[i] === "--port" && /^\d+$/.test(argv[i + 1] ?? "")) port = Number(argv[++i]);
+  else if (argv[i] === "--skip-build") skipBuild = true;
+  else if (argv[i] === "--full") full = true;
   else {
     console.log(USAGE);
     process.exit(1);
@@ -95,6 +110,27 @@ class StepFailure extends Error {
 }
 
 const devNode = path.join(contractsDir, "scripts", "dev-node.mjs");
+const buildRecordPath = path.join(scratch, "rehearsal-build.json");
+const buildIdPath = path.join(webDir, ".next", "BUILD_ID");
+const readBuildId = () => (fs.existsSync(buildIdPath) ? fs.readFileSync(buildIdPath, "utf8").trim() : null);
+
+/** True when some file under web/.next/static contains the address (case-insensitive). */
+function bundleHasAddress(address) {
+  const needle = address.toLowerCase();
+  const walk = (dir) => {
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      const p = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        if (walk(p)) return true;
+      } else if (/\.(js|json|html|txt)$/.test(entry.name) && fs.readFileSync(p, "utf8").toLowerCase().includes(needle)) {
+        return true;
+      }
+    }
+    return false;
+  };
+  const staticDir = path.join(webDir, ".next", "static");
+  return fs.existsSync(staticDir) && walk(staticDir);
+}
 const durations = [];
 const t0 = Date.now();
 let startedNode = false;
@@ -118,6 +154,19 @@ async function main() {
     }
     const busy = await fetch(`http://127.0.0.1:${port}/`, { signal: AbortSignal.timeout(2_000) }).then(() => true, () => false);
     if (busy) throw new StepFailure(1, "preflight", `port ${port} is busy; pass --port <free port>`);
+    // PD-16: a web/.env.local that turns Sepolia on, or forces the stub, would make this a different demo.
+    const envFile = path.join(webDir, ".env.local");
+    if (fs.existsSync(envFile)) {
+      for (const line of fs.readFileSync(envFile, "utf8").split(/\r?\n/)) {
+        const m = line.match(/^\s*(NEXT_PUBLIC_ENABLE_SEPOLIA|NEXT_PUBLIC_OPAQUELY_DATA)\s*=\s*["']?([^"'\s#]*)/);
+        if (!m) continue;
+        const turnsOn = (m[1] === "NEXT_PUBLIC_ENABLE_SEPOLIA" && m[2] === "1") || (m[1] === "NEXT_PUBLIC_OPAQUELY_DATA" && m[2] === "stub");
+        if (turnsOn) {
+          // Only the variable name is printed, never the file contents.
+          throw new StepFailure(1, "preflight", `web/.env.local turns on ${m[1]}; the rehearsal proves the local demo, so comment that line out and rerun`);
+        }
+      }
+    }
     envWasClean = git(["status", "--porcelain", "web/next-env.d.ts"]).stdout.trim() === "";
   });
 
@@ -158,13 +207,37 @@ async function main() {
   });
 
   await step(6, "build", async () => {
+    if (skipBuild) {
+      // PD-15: trust only a build this script made. Any other bundle might be a flag-on Sepolia build.
+      const registry = JSON.parse(fs.readFileSync(path.join(webDir, "src", "contracts", "deployments.json"), "utf8"))["31337"].DatasetRegistry.address;
+      const record = fs.existsSync(buildRecordPath) ? JSON.parse(fs.readFileSync(buildRecordPath, "utf8")) : null;
+      const buildId = readBuildId();
+      let reason = null;
+      if (!record) reason = "no rehearsal build record";
+      else if (!buildId || record.buildId !== buildId) reason = "BUILD_ID differs from the rehearsal record";
+      else if (!bundleHasAddress(registry)) reason = "registry address not in the bundle";
+      if (!reason) {
+        say(`build skipped (rehearsal build ${buildId}, registry ${registry} in bundle)`);
+        return;
+      }
+      say(`rebuilding (${reason})`);
+    }
     const r = await runNode([path.join(webDir, "node_modules", "next", "dist", "bin", "next"), "build"], webDir);
     if (r.code !== 0) throw new StepFailure(6, "build", "next build failed");
+    fs.writeFileSync(buildRecordPath, JSON.stringify({ buildId: readBuildId(), at: new Date().toISOString() }) + "\n");
   });
 
   await step(7, "golden path", async () => {
     const r = await runNode([path.join(webDir, "e2e", "run-all.mjs"), "--port", String(port), "demo-rehearsal"], webDir);
     if (r.code !== 0 || !r.out.includes("PASS demo-rehearsal")) throw new StepFailure(7, "golden path", "the demo-rehearsal e2e did not pass");
+  });
+
+  await step(8, full ? "regression (full suite)" : "regression", async () => {
+    // Default: the demo scripts. --full: every e2e script (with the node up all of them run, including a second,
+    // delta-based demo-rehearsal).
+    const names = full ? [] : ["seller-ocr", "seller-live", "buyer-live"];
+    const r = await runNode([path.join(webDir, "e2e", "run-all.mjs"), "--port", String(port), ...names], webDir);
+    if (r.code !== 0 || !/^E2E OK/m.test(r.out)) throw new StepFailure(8, "regression", "the e2e regression run did not end with E2E OK");
   });
 }
 
