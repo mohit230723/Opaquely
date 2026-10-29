@@ -64,9 +64,11 @@ function checkPins() {
 }
 
 // ---------------------------------------------------------------- privacy
-// Files that may import an FHE SDK or the OCR package. Phase 2 opened exactly these two; Phase 4
-// adds the OCR module.
+// Files that may import the FHE SDK (Phase 2 opened exactly these two) and, separately, the one file
+// that may import the OCR package tesseract.js (Phase 4). The lists are kept apart so an FHE file
+// cannot start importing the OCR package, and the OCR module cannot import the FHE SDK.
 const ALLOWED_SDK_FILES = ["src/lib/fhe.ts", "src/lib/zama.ts"];
+const ALLOWED_OCR_FILES = ["src/lib/ocr.ts"];
 const STORAGE_ALLOWED_FILE = "src/lib/role.ts";
 
 const SOURCE_EXT = /\.(ts|tsx|js|jsx)$/;
@@ -81,7 +83,8 @@ function walk(dir, out) {
 }
 
 const LINE_RULES = [
-  { rule: "sdk-import", test: (l) => /(?:from\s+|import\s*\(\s*|require\s*\(\s*|import\s+)["']@zama-fhe\//.test(l) || /(?:from\s+|import\s*\(\s*|require\s*\(\s*|import\s+)["']tesseract/.test(l), sdkFile: true },
+  { rule: "sdk-import", test: (l) => /(?:from\s+|import\s*\(\s*|require\s*\(\s*|import\s+)["']@zama-fhe\//.test(l), allowedFiles: ALLOWED_SDK_FILES },
+  { rule: "sdk-import", test: (l) => /(?:from\s+|import\s*\(\s*|require\s*\(\s*|import\s+)["']tesseract/.test(l), allowedFiles: ALLOWED_OCR_FILES },
   { rule: "local-storage", test: (l) => /localStorage/.test(l), allowedFile: STORAGE_ALLOWED_FILE },
   { rule: "session-storage", test: (l) => /sessionStorage/.test(l) },
   { rule: "indexed-db", test: (l) => /indexedDB/.test(l) },
@@ -92,10 +95,11 @@ const LINE_RULES = [
   { rule: "network-send(FormData)", test: (l) => /new\s+FormData/.test(l) },
 ];
 
-// A static value import of the FHE SDK is evaluated by the server render, which is the SSR crash
-// vector (the SDK needs browser globals). Inside the allowed files only `import type` and
-// `import()` inside async functions are accepted.
-const SDK_STATIC_VALUE_IMPORT = /^\s*import\s+(?!type\b)[^(]*?from\s+["']@zama-fhe\/|^\s*import\s+["']@zama-fhe\//;
+// A static value import of the FHE SDK or tesseract.js is evaluated by the server render, which is
+// the SSR crash vector (both need browser globals). Inside the allowed files (FHE and OCR alike)
+// only `import type` and `import()` inside async functions are accepted.
+const SDK_STATIC_VALUE_IMPORT = /^\s*import\s+(?!type\b)[^(]*?from\s+["'](?:@zama-fhe\/|tesseract)|^\s*import\s+["'](?:@zama-fhe\/|tesseract)/;
+const ALL_ALLOWED_FILES = [...ALLOWED_SDK_FILES, ...ALLOWED_OCR_FILES];
 
 function checkPrivacy() {
   const srcDir = path.join(webDir, "src");
@@ -107,10 +111,10 @@ function checkPrivacy() {
     lines.forEach((text, i) => {
       for (const rule of LINE_RULES) {
         if (rule.allowedFile && r === rule.allowedFile) continue;
-        if (rule.sdkFile && ALLOWED_SDK_FILES.includes(r)) continue;
+        if (rule.allowedFiles && rule.allowedFiles.includes(r)) continue;
         if (rule.test(text)) violation(rule.rule, r, i + 1);
       }
-      if (ALLOWED_SDK_FILES.includes(r) && SDK_STATIC_VALUE_IMPORT.test(text)) violation("sdk-static-import", r, i + 1);
+      if (ALL_ALLOWED_FILES.includes(r) && SDK_STATIC_VALUE_IMPORT.test(text)) violation("sdk-static-import", r, i + 1);
     });
   }
   for (const name of ["next.config.ts", "next.config.mjs", "next.config.js"]) {

@@ -21,6 +21,8 @@ export interface BillReviewFormProps {
   busy?: boolean;
   /** Change this value to clear the form (for example after "Add another bill"). */
   resetKey?: number | string;
+  /** Pre-fills the fields (OCR). Read once per mount, so change resetKey together with it. */
+  initial?: BillFormFields;
 }
 
 type FieldName = keyof BillFormFields;
@@ -32,12 +34,12 @@ const EMPTY: BillFormFields = { vendor: "", amount: "", date: "", category: null
  * empty. Values live in component state only: no storage, no logging, no URL params.
  * The inner form is keyed by resetKey, so changing the key mounts a fresh, empty form.
  */
-export function BillReviewForm({ onSubmit, busy = false, resetKey = 0 }: BillReviewFormProps) {
-  return <ReviewFormBody key={resetKey} onSubmit={onSubmit} busy={busy} />;
+export function BillReviewForm({ onSubmit, busy = false, resetKey = 0, initial }: BillReviewFormProps) {
+  return <ReviewFormBody key={resetKey} onSubmit={onSubmit} busy={busy} initial={initial} />;
 }
 
-function ReviewFormBody({ onSubmit, busy }: { onSubmit: (draft: BillDraft) => void; busy: boolean }) {
-  const [fields, setFields] = useState<BillFormFields>(EMPTY);
+function ReviewFormBody({ onSubmit, busy, initial }: { onSubmit: (draft: BillDraft) => void; busy: boolean; initial?: BillFormFields }) {
+  const [fields, setFields] = useState<BillFormFields>(initial ?? EMPTY);
   // A field's error shows once it has been left (blur) or a submit was attempted; after that it
   // follows the value, so fixing the field clears the message right away.
   const [shown, setShown] = useState<ReadonlySet<FieldName>>(new Set());

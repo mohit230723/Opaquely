@@ -2,6 +2,7 @@
 
 import { useParams } from "next/navigation";
 import { useState } from "react";
+import { useAccount } from "wagmi";
 import { EmptyState } from "@/components/EmptyState";
 import { AsyncBoundary } from "@/components/AsyncBoundary";
 import { PageShell } from "@/components/PageShell";
@@ -14,8 +15,47 @@ import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { useAddBill, useDataset } from "@/data/hooks";
 import type { BillDraft } from "@/data/types";
+import type { OcrState } from "@/lib/use-bill-ocr";
 import { plural } from "@/lib/format";
+import { networkLabel } from "@/lib/network";
 import { isBusy } from "@/lib/tx-machine";
+import { useBillOcr } from "@/lib/use-bill-ocr";
+import type { BillFormFields } from "@/lib/validate-bill";
+
+function OcrStatus({ state }: { state: OcrState }) {
+  if (state.phase === "idle") return null;
+  if (state.phase === "failed") {
+    return (
+      <p role="status" data-testid="ocr-status" className="mt-3 text-sm text-danger">
+        {state.reason}
+      </p>
+    );
+  }
+  if (state.phase === "done") {
+    return (
+      <p role="status" data-testid="ocr-status" className="mt-3 text-sm text-muted">
+        Read the bill. Check every field before you add it.
+      </p>
+    );
+  }
+  const reading = state.status === "recognizing text";
+  const pct = reading ? Math.round(state.progress * 100) : undefined;
+  return (
+    <div data-testid="ocr-status" role="status" className="mt-3">
+      <p className="text-sm text-muted">{reading ? `Reading the bill, ${pct}%` : "Loading the reader"}</p>
+      <div
+        role="progressbar"
+        aria-label="OCR progress"
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={pct}
+        className="mt-2 h-2 overflow-hidden rounded-full bg-surface-raised"
+      >
+        <div className="h-full bg-accent transition-[width]" style={{ width: `${pct ?? 5}%` }} />
+      </div>
+    </div>
+  );
+}
 
 export default function AddBillPage() {
   const params = useParams<{ id: string }>();
@@ -49,8 +89,17 @@ export default function AddBillPage() {
 
 function AddBillScreen({ datasetId, billCount }: { datasetId: string; billCount: number }) {
   const { state, run, reset } = useAddBill(datasetId);
+  const { chainId } = useAccount();
+  const localMock = networkLabel(chainId) === "Local FHEVM mock";
   const [resetKey, setResetKey] = useState(0);
   const [last, setLast] = useState<{ draft: BillDraft; index: number } | null>(null);
+  const [prefill, setPrefill] = useState<{ n: number; fields: BillFormFields } | undefined>();
+  const ocr = useBillOcr((p) =>
+    setPrefill((prev) => ({
+      n: (prev?.n ?? 0) + 1,
+      fields: { vendor: p.vendor, amount: p.amount, date: p.date, category: p.category },
+    })),
+  );
 
   const busy = isBusy(state);
   const confirmed = state.phase === "confirmed";
@@ -65,6 +114,8 @@ function AddBillScreen({ datasetId, billCount }: { datasetId: string; billCount:
   function addAnother() {
     reset();
     setLast(null);
+    setPrefill(undefined);
+    ocr.reset();
     setResetKey((k) => k + 1);
   }
 
@@ -73,12 +124,27 @@ function AddBillScreen({ datasetId, billCount }: { datasetId: string; billCount:
       <div className="flex items-start gap-3 rounded-lg border border-border bg-surface p-4">
         <LockIcon className="mt-0.5 shrink-0 text-accent-bright" />
         <div className="text-sm">
-          <p>Local only: the image and these fields stay in your browser until they are encrypted.</p>
-          <p className="mt-1 text-muted">Reading the bill automatically arrives in a later phase. Fill in the fields from your bill.</p>
+          <p>
+            {localMock
+              ? "Local FHEVM mock: the image and the vendor stay in this browser, but this local test node receives the amount, date and category in cleartext. Use a sample bill or made-up values, never a real bill."
+              : "The image and the vendor stay in this browser. The amount, date and category are encrypted before they leave it."}
+          </p>
+          <p className="mt-1 text-muted">
+            Choose an image or a sample bill to read it in this browser, then check every field before you add it. You can also type the fields by hand.
+          </p>
         </div>
       </div>
       <div className="grid items-start gap-6 lg:grid-cols-2">
-        <Dropzone key={resetKey} />
+        <div>
+          <Dropzone
+            key={resetKey}
+            onImageChange={(url) => {
+              if (url) void ocr.run(url);
+              else ocr.reset();
+            }}
+          />
+          <OcrStatus state={ocr.state} />
+        </div>
         <Card>
           {confirmed ? (
             <div>
@@ -93,7 +159,7 @@ function AddBillScreen({ datasetId, billCount }: { datasetId: string; billCount:
               </div>
             </div>
           ) : (
-            <BillReviewForm onSubmit={submit} busy={busy} resetKey={resetKey} />
+            <BillReviewForm onSubmit={submit} busy={busy} resetKey={`${resetKey}-${prefill?.n ?? 0}`} initial={prefill?.fields} />
           )}
           <TxStatus
             state={state}

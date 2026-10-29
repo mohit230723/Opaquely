@@ -1,0 +1,7 @@
+// Raw Tesseract.js 7.0.0 output (eng, 4.0.0_best_int, LSTM only) for the three bundled sample bills, captured in headless Chrome.
+// Regenerate with the OCR experiment if the sample PNGs change. Not real customer data.
+export const OCR_FIXTURES = {
+  "grocery": "SHREE GANESH SUPER MART\nPlot 14, MG Road, Pune 411001\n\nGSTIN 27ABCDE1234F1Z5\nBill No: 004521 Date: 18/10/2026\nTime: 18:42 Cashier: 03\nITEM QTY AMOUNT\nBasmati Rice 5kg 1 642.00\nToor Dal lkg 2 318.00\nAmul Butter 500g 1 285.00\nFresh Milk 1L 4 112.00\nTomato 2kg 1 79.00\nTotal Items: 9\nSub Total 1,436.00\nGST 5% 71.80\nGRAND TOTAL 1,507.80\nCASH TENDERED 2,000.00\nCHANGE 492.20\n\nThank you, visit again!\n",
+  "electricity": "Bright Power Distribution Co. Ltd.\n\nELECTRICITY BILL\n\nConsumer No: 1002938475 Bill Date: 12 Oct 2026\nBilling Period: 01 Sep - 30 Sep 2026 Due Date: 27 Oct 2026\nUnits Consumed: 412 kWh\n\nCharge Amount (Rs.)\nEnergy Charges 2,884.00\nFixed Charges 150.00\nElectricity Duty 288.40\nArrears 0.00\nTotal Amount Due Rs. 3,322.40\nPay before the due date to avoid a late fee.\n",
+  "pharmacy": "CityCare Pharmacy\n\n12 Station Road, Nagpur 440001 | Ph 0712 5550142\n\nInvoice No: INV-20817 Date : 25-10-2026\nPatient: Walk-in customer\n\nMedicine Qty MRP Amount\nMetformin 500mg 3 180.00 540.00\nAtorvastatin 10mg 2 310.00 620.00\nInsulin Glargine 2 3,250.00 6,500.00\nGlucose strips 1 785.50 785.50\nTotal Qty: 8 Discount: 100.00\nNet Amount Payable Rs. 8,345.50\n"
+} as const;

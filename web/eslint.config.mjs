@@ -10,6 +10,8 @@ export default defineConfig([
     "next-env.d.ts",
     "e2e/**",
     "scripts/**",
+    // Vendored Tesseract OCR assets (worker and wasm cores, sha256-pinned): minified third-party code.
+    "public/**",
     // Vendored hero (plan 01-05); the file is ignored now so no later plan edits this config for it.
     "src/components/GradientASCII.jsx",
   ]),

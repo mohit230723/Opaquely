@@ -10,12 +10,19 @@ interface Preview {
   name: string;
 }
 
+/** Synthetic bills bundled in public/samples (no real data), for demos and as the OCR e2e inputs. */
+export const SAMPLE_BILLS = [
+  { url: "/samples/bill-grocery.png", label: "Grocery" },
+  { url: "/samples/bill-electricity.png", label: "Electricity" },
+  { url: "/samples/bill-pharmacy.png", label: "Pharmacy" },
+] as const;
+
 /**
  * Optional bill photo: pick or drop a JPG or PNG and see it in this tab. The File and its blob: URL
  * live only in component state. No storage, no FormData, no network, no logging. Remount it with a
  * new `key` to clear the image.
  */
-export function Dropzone() {
+export function Dropzone({ onImageChange }: { onImageChange?: (url: string | null) => void }) {
   const [preview, setPreview] = useState<Preview | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [dragging, setDragging] = useState(false);
@@ -37,7 +44,15 @@ export function Dropzone() {
       return;
     }
     setError(null);
-    setPreview({ url: URL.createObjectURL(file), name: file.name });
+    const url = URL.createObjectURL(file);
+    setPreview({ url, name: file.name });
+    onImageChange?.(url);
+  }
+
+  function pickSample(sample: (typeof SAMPLE_BILLS)[number]) {
+    setError(null);
+    setPreview({ url: sample.url, name: `${sample.label} sample bill` });
+    onImageChange?.(sample.url);
   }
 
   function onPick(e: ChangeEvent<HTMLInputElement>) {
@@ -81,6 +96,14 @@ export function Dropzone() {
           onChange={onPick}
         />
       </div>
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        <span className="text-sm text-muted">Or try a sample bill:</span>
+        {SAMPLE_BILLS.map((sample) => (
+          <Button key={sample.url} variant="secondary" onClick={() => pickSample(sample)}>
+            {sample.label}
+          </Button>
+        ))}
+      </div>
       {error ? (
         <p role="alert" className="mt-3 flex items-start gap-2 text-sm text-danger">
           <AlertIcon className="mt-0.5 shrink-0" width={16} height={16} />
@@ -103,6 +126,7 @@ export function Dropzone() {
             onClick={() => {
               setPreview(null);
               setError(null);
+              onImageChange?.(null);
             }}
           >
             Remove image

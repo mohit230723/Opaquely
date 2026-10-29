@@ -1,0 +1,2 @@
+# Vendored Tesseract OCR assets must stay byte-exact (sha256-pinned in public/tesseract/README.md and src/lib/ocr-assets.test.ts) even under core.autocrlf=true.
+public/tesseract/** -text -diff
