@@ -12,6 +12,7 @@ import { deploymentStatus, STALE_DEPLOYMENT_TEXT } from "@/lib/deployment";
  * committed addresses) and works on Sepolia too. It reads the code at the registry and the marketplace once per
  * page load through wagmi's own transport and shows a non-dismissible alert only when both reads succeeded and
  * one is empty; a pending or failed read shows nothing. In the stub or off a deployed chain it does nothing.
+ * The wrapper carries data-status ("ok", "missing" or "unknown") so a test can wait for the reads to settle.
  */
 export function DeploymentGuard({ children }: { children: ReactNode }) {
   const { chainId, source } = useDataScope();
@@ -42,6 +43,7 @@ export function DeploymentGuard({ children }: { children: ReactNode }) {
       ) : null}
       <div
         data-testid="deployment-guarded"
+        data-status={status}
         inert={missing}
         aria-hidden={missing || undefined}
         className={missing ? "pointer-events-none opacity-40" : undefined}

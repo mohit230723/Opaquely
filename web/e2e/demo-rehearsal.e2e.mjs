@@ -95,8 +95,14 @@ export default async function demoRehearsal({ baseUrl, accounts, assert, waitFor
       { timeout },
     );
   const audit = createPrivacyAudit({ baseUrl, rpcUrl: RPC, markers: MARKERS });
-  /** On a deployed node the stale-deployment banner must be absent (T-06-14); the guard has read its code by now. */
+  /**
+   * On a deployed node the stale-deployment banner must be absent (T-06-14). The guard shows nothing while its
+   * code read is pending, so first wait until it reports data-status="ok" (both reads succeeded and found code),
+   * then check the banner stays away for a short window.
+   */
   const assertNoStaleBanner = async (page, where) => {
+    await page.locator('[data-testid="deployment-guarded"][data-status="ok"]').waitFor(T);
+    await page.waitForTimeout(500);
     assert((await page.getByText("The contracts are not on this chain").count()) === 0, `${where}: no stale-deployment banner on a deployed node`);
   };
   /** The header badge, its tooltip and the footer all say the local chain is a mock (T-06-05). */
