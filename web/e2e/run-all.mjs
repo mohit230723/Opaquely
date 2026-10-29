@@ -86,6 +86,8 @@ async function main() {
   const server = spawn(process.execPath, ["node_modules/next/dist/bin/next", "start", "-p", String(port)], {
     cwd: webDir,
     stdio: ["ignore", "ignore", "inherit"],
+    // /dev/fhe is a 404 in production unless this is set (the fhe-spike script needs the page).
+    env: { ...process.env, ENABLE_DEV_FHE: "1" },
   });
   let browser;
   let failed = false;

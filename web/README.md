@@ -48,6 +48,8 @@ Local mode uses the `cleartext()` relayer with a chain override, so the local no
 
 The dev page is `/dev/fhe?address=<FheSpike address>`. It encrypts an amount in the browser, asks the wallet to sign `submit` on the spike contract and shows the handle and tx hash.
 
+In `npm run dev` the page is always available. In a production build (`next start`) `/dev/fhe` returns 404 unless the server is started with `ENABLE_DEV_FHE=1` in its environment. The flag is read at request time, so no rebuild is needed (it is deliberately not a `NEXT_PUBLIC_` variable, which Next inlines at build time). `e2e/run-all.mjs` sets it for the `next start` it launches; to open the page by hand on a production build, run `ENABLE_DEV_FHE=1 npm run start`.
+
 Gate commands, in order (from `web/`):
 
 ```bash
