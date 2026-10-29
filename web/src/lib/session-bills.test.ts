@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { clearSessionBills, getSessionBills, recordSessionBill, subscribeSessionBills } from "./session-bills";
+import { clearSessionBills, declaredCategories, getSessionBills, recordSessionBill, subscribeSessionBills } from "./session-bills";
 import type { BillDraft } from "@/data/types";
 
 const A = "0xF39Fd6e51aad88F6F4ce6aB8827279cffFb92266";
@@ -68,5 +68,26 @@ describe("session bills", () => {
     unsubscribe();
     recordSessionBill(A, "ds", { index: 0, draft: draft("a") });
     expect(calls).toBe(2);
+  });
+});
+
+describe("declaredCategories", () => {
+  const add = (cats: number[]) =>
+    cats.forEach((category, index) => recordSessionBill(A, "ds", { index, draft: { ...draft("v"), category } }));
+
+  it("returns the sorted unique categories when the tab holds every bill", () => {
+    add([2, 0, 2]);
+    expect(declaredCategories(A, "ds", 3)).toEqual([0, 2]);
+  });
+  it("returns nothing when the tab holds fewer bills than the chain", () => {
+    add([2, 0]);
+    expect(declaredCategories(A, "ds", 3)).toEqual([]);
+  });
+  it("returns nothing when the tab holds more rows than the chain (stale rows)", () => {
+    add([2, 0, 1, 1]);
+    expect(declaredCategories(A, "ds", 3)).toEqual([]);
+  });
+  it("returns nothing for a count of zero", () => {
+    expect(declaredCategories(A, "ds", 0)).toEqual([]);
   });
 });

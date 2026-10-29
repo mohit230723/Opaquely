@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  ENCRYPT_FAILED_REASON,
   REVERT_REASONS,
   ReadableTxError,
   USER_REJECTED_REASON,
@@ -100,5 +101,23 @@ describe("toReadableError", () => {
     const a = named("Error") as Error & { cause?: unknown };
     a.cause = a;
     expect(toReadableError(a).code).toBe("unknown");
+  });
+});
+
+describe("Phase 4 revert reasons", () => {
+  const NEW_KEYS = [
+    "TooFewBills", "TooManyBills", "DatasetIsSealed", "NotDatasetOwner", "DatasetNotFound", "InvalidName", "InvalidTitle",
+    "DescriptionTooLong", "ZeroPrice", "InvalidCategoryMask", "ListingNotFound", "WrongPayment", "NothingToWithdraw", "TransferFailed",
+  ];
+
+  it.each(NEW_KEYS)("decodes %s from a nested revert", (errorName) => {
+    const e = named("ContractFunctionExecutionError", {}, named("ContractFunctionRevertedError", { data: { errorName } }));
+    expect(toReadableError(e)).toEqual({ reason: REVERT_REASONS[errorName], code: "reverted" });
+  });
+
+  it("reads the fixed copy the screens rely on", () => {
+    expect(REVERT_REASONS.TooFewBills).toBe("Add at least 3 bills before listing.");
+    expect(REVERT_REASONS.TooManyBills).toContain("at most 50 bills");
+    expect(ENCRYPT_FAILED_REASON).toBe("Encryption failed. Is the local node running?");
   });
 });

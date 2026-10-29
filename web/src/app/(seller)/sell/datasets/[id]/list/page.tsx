@@ -215,6 +215,9 @@ export default function ListDatasetPage() {
         footer={<TxStatus state={state} onRetry={onConfirm} />}
       >
         <p>Listing seals this dataset. You will not be able to add or remove bills afterwards.</p>
+        <p className="mt-3">
+          The listing also shows buyers which categories these bills cover, taken from the bills you added in this browser session.
+        </p>
         {submitted ? <p className="mt-3 text-muted">Price {formatEth(submitted.priceWei)}</p> : null}
       </ConfirmDialog>
     </PageShell>
