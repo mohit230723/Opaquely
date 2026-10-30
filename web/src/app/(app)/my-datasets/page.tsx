@@ -1,36 +1,46 @@
 "use client";
 
-import Link from "next/link";
+import { useMemo } from "react";
 import { AsyncBoundary } from "@/components/AsyncBoundary";
 import { EmptyState } from "@/components/EmptyState";
 import { PageShell } from "@/components/PageShell";
-import { Skeleton } from "@/components/Skeleton";
-import { DatasetList } from "@/components/seller/DatasetList";
-import { Button } from "@/components/ui/Button";
-import { Card } from "@/components/ui/Card";
-import { StatusChip } from "@/components/ui/StatusChip";
-import { useMyDatasets, useMyPurchases } from "@/data/hooks";
-import { BUYER_CAN_DECRYPT, DECRYPT_COMING_LABEL, DECRYPT_HELPER } from "@/lib/copy";
-import { formatDate, formatEth, shortHash } from "@/lib/format";
+import { BoughtDatasetCard } from "@/components/datasets/BoughtDatasetCard";
+import { DATASET_GRID, DatasetGridSkeleton } from "@/components/datasets/DatasetGridSkeleton";
+import { ListedDatasetCard, type SalesState } from "@/components/datasets/ListedDatasetCard";
+import { useActivity, useMyDatasets, useMyPurchases } from "@/data/hooks";
+import { useDataScope } from "@/data/provider";
+import { deriveSales, myListingIdsOf } from "@/lib/my-sales";
 
-function ListSkeleton() {
-  return (
-    <div className="flex flex-col gap-4">
-      {Array.from({ length: 3 }, (_, i) => (
-        <Skeleton key={i} className="h-24 w-full" />
-      ))}
-    </div>
-  );
-}
+const NO_PURCHASES: never[] = [];
 
-// Interim body (plan 07-01): the old /sell/datasets list and /buy/purchases list. Plan 07-06 rebuilds it as cards.
+/**
+ * Two independent sections. Listed by me renders from useMyDatasets alone; the Sold line is derived from the
+ * activity read, which is read outside the listed AsyncBoundary so a slow or failed scan never blanks the cards.
+ * Bought by me renders from useMyPurchases. Each section has its own loading, empty and error state.
+ */
 export default function MyDatasetsPage() {
+  const { address } = useDataScope();
   const datasets = useMyDatasets();
   const purchases = useMyPurchases();
+  const activity = useActivity();
+
+  const salesState: SalesState =
+    activity.data !== undefined ? "ready" : activity.status === "error" ? "error" : "pending";
+
+  const sales = useMemo(
+    () =>
+      deriveSales({
+        me: address,
+        myListingIds: myListingIdsOf(datasets.data ?? []),
+        events: activity.data ?? [],
+        purchases: purchases.data ?? NO_PURCHASES,
+      }),
+    [address, datasets.data, activity.data, purchases.data],
+  );
 
   return (
     <PageShell title="My Datasets" subtitle="Datasets you listed and datasets you bought.">
-      <div className="flex flex-col gap-10">
+      <div className="flex flex-col gap-12">
         <section aria-labelledby="listed-by-me">
           <h2 id="listed-by-me" className="text-lg font-semibold">
             Listed by me
@@ -38,16 +48,29 @@ export default function MyDatasetsPage() {
           <div className="mt-4">
             <AsyncBoundary
               query={datasets}
-              thing="datasets"
-              skeleton={<ListSkeleton />}
+              thing="your datasets"
+              skeleton={<DatasetGridSkeleton />}
               isEmpty={(rows) => rows.length === 0}
               empty={
                 <EmptyState heading="No datasets yet" action={{ label: "Upload", href: "/upload" }}>
-                  A dataset is a named group of bills you can seal and sell.
+                  Upload your bills to create your first dataset.
                 </EmptyState>
               }
             >
-              {(rows) => <DatasetList datasets={rows} />}
+              {(rows) => (
+                <ul className={DATASET_GRID}>
+                  {[...rows]
+                    .sort((a, b) => b.createdAt - a.createdAt)
+                    .map((d) => (
+                      <ListedDatasetCard
+                        key={d.id}
+                        dataset={d}
+                        sales={d.listingId === undefined ? undefined : sales.perListing.get(d.listingId)}
+                        salesState={salesState}
+                      />
+                    ))}
+                </ul>
+              )}
             </AsyncBoundary>
           </div>
         </section>
@@ -59,49 +82,19 @@ export default function MyDatasetsPage() {
           <div className="mt-4">
             <AsyncBoundary
               query={purchases}
-              thing="purchases"
-              skeleton={<ListSkeleton />}
-              isEmpty={(data) => data.length === 0}
+              thing="your purchases"
+              skeleton={<DatasetGridSkeleton />}
+              isEmpty={(rows) => rows.length === 0}
               empty={
                 <EmptyState heading="No purchases yet" action={{ label: "Browse marketplace", href: "/marketplace" }}>
                   Datasets you buy appear here with your access status.
                 </EmptyState>
               }
             >
-              {(data) => (
-                <ul className="flex flex-col gap-4">
-                  {data.map((p) => (
-                    <Card
-                      as="li"
-                      key={`${p.listingId}-${p.txHash}`}
-                      className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between"
-                    >
-                      <div className="min-w-0">
-                        <Link
-                          href={`/marketplace/${p.listingId}`}
-                          className="text-base font-semibold text-text underline-offset-4 hover:underline wrap-break-word"
-                        >
-                          {p.title}
-                        </Link>
-                        <p className="mt-1 flex flex-wrap items-center gap-x-3 text-sm text-muted">
-                          <span>{`Paid ${formatEth(p.priceWei)}`}</span>
-                          <span>{formatDate(p.purchasedAt)}</span>
-                          <span title={p.txHash} className="font-mono">
-                            {shortHash(p.txHash)}
-                          </span>
-                        </p>
-                      </div>
-                      <div className="flex flex-col items-start gap-2 sm:items-end">
-                        <div className="flex flex-wrap items-center gap-3">
-                          {p.hasAccess ? <StatusChip variant="success">Access granted</StatusChip> : null}
-                          <Button variant="secondary" disabled>
-                            {DECRYPT_COMING_LABEL}
-                          </Button>
-                        </div>
-                        <p className="text-sm text-muted">{BUYER_CAN_DECRYPT}</p>
-                        <p className="text-sm text-muted">{DECRYPT_HELPER}</p>
-                      </div>
-                    </Card>
+              {(rows) => (
+                <ul className={DATASET_GRID}>
+                  {rows.map((p) => (
+                    <BoughtDatasetCard key={`${p.listingId}-${p.txHash}`} purchase={p} />
                   ))}
                 </ul>
               )}
