@@ -1,4 +1,4 @@
-// Landing: the hero (size, live WebGL2 context), the CTAs, and the "How it works" explainer.
+// Landing: the hero (size, live WebGL2 context), the CTAs, the "How it works" explainer and the footer.
 
 const STEPS = [
   ["Upload", "Add a bill photo. It stays in your browser."],
@@ -48,6 +48,35 @@ export default async function landing({ baseUrl, accounts, assert, waitForWallet
     await anon.getByText(line, { exact: true }).waitFor({ state: "attached", timeout: 10_000 });
   }
   assert((await anon.locator("ol > li").count()) === 6, "expected six steps in the ordered list");
+
+  // D-08: the one footer, with the brand line, the Explore nav, the Project column and the copyright.
+  assert((await anon.evaluate(() => document.querySelectorAll("footer").length)) === 1, "expected exactly one footer");
+  await anon.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+  const footer = anon.locator("footer");
+  for (const text of [
+    "© 2026 Opaquely. A college minor project.",
+    "Encrypted bill datasets. Buyers get insights, never single bills.",
+    "Built on Zama FHEVM",
+  ]) {
+    await footer.getByText(text, { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+  }
+  const footerNav = footer.getByRole("navigation", { name: "Footer" });
+  const footerLinks = footerNav.getByRole("link");
+  assert((await footerLinks.count()) === 4, `expected four Explore links in the footer, got ${await footerLinks.count()}`);
+  for (const [name, href] of [
+    ["Upload", "/upload"],
+    ["Marketplace", "/marketplace"],
+    ["My Datasets", "/my-datasets"],
+    ["My Account", "/account"],
+  ]) {
+    const got = await footerNav.getByRole("link", { name, exact: true }).getAttribute("href");
+    assert(got === href, `footer ${name} must link to ${href}, got ${got}`);
+  }
+  const github = footer.getByRole("link", { name: "GitHub", exact: true });
+  assert((await github.getAttribute("target")) === "_blank", "footer GitHub must open in a new tab");
+  const rel = (await github.getAttribute("rel")) ?? "";
+  assert(rel.includes("noopener") && rel.includes("noreferrer"), `footer GitHub rel must include noopener noreferrer, got "${rel}"`);
+  await anon.evaluate(() => window.scrollTo(0, 0));
 
   // A connected wallet with nothing stored goes straight to the Marketplace (no role chooser).
   const buyer = await newPage({ account: accounts.buyer });
