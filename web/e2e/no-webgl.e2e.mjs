@@ -1,5 +1,6 @@
-// No WebGL (Phase 7, D-13): with every WebGL context refused, the nav, the specular buttons and the purchase
-// dialog still work with the flat fallback look and no page error. With WebGL, a visible button goes live.
+// No WebGL (Phase 7, D-13): with every WebGL context refused, the nav, the Upload page's Encrypt button and the
+// purchase dialog still work with the flat fallback look and no page error. With WebGL, a visible unblocked button
+// goes live.
 
 const NO_WEBGL = `(() => {
   const original = HTMLCanvasElement.prototype.getContext;
@@ -22,14 +23,33 @@ export default async function noWebgl({ baseUrl, accounts, assert, waitForWallet
   }
   await page.locator("section").first().getByRole("link", { name: "Upload" }).waitFor({ state: "visible", timeout: 10_000 });
 
-  // Upload: the primary submit button is flat, named and clickable; an empty submit shows the validation text.
+  // Upload: Encrypt is flat, named and blocked until step 1 is filled; the review form still validates.
   await page.goto(baseUrl + "/upload");
-  const submit = page.locator("main").getByRole("button", { name: "Create dataset" });
-  await submit.waitFor({ state: "visible", timeout: 25_000 });
+  const main = page.locator("main");
+  const encrypt = main.getByRole("button", { name: "Encrypt", exact: true });
+  await encrypt.waitFor({ state: "visible", timeout: 25_000 });
   await page.waitForTimeout(1_000);
-  assert((await submit.getAttribute("data-gl")) === "off", "without WebGL the button must stay data-gl=off");
-  await submit.click();
-  await page.getByText("Give your dataset a name (1 to 60 characters).").first().waitFor({ state: "visible", timeout: 10_000 });
+  assert((await encrypt.getAttribute("data-gl")) === "off", "without WebGL the button must stay data-gl=off");
+  assert((await encrypt.getAttribute("aria-disabled")) === "true", "Encrypt must be aria-disabled before step 1 is filled");
+  await main.getByText("Add a name and description first.").waitFor({ state: "visible", timeout: 10_000 });
+  await main.getByLabel("Dataset name").fill("No WebGL dataset");
+  await main.getByLabel("Description").fill("Bills read without WebGL.");
+  await main.getByText("Add a name and description first.").waitFor({ state: "detached", timeout: 10_000 });
+  // The bill fields are still empty, so the button stays blocked for that reason (Phase 1 review-form contract);
+  // Enter in a bill field shows every review error.
+  await main.getByText("Enter an amount, a date and a category to continue.").waitFor({ state: "visible", timeout: 10_000 });
+  await main.getByLabel("Total amount").press("Enter");
+  await main.getByText("Enter an amount greater than 0.").waitFor({ state: "visible", timeout: 10_000 });
+  await fillBill(main);
+  await page.waitForFunction(
+    () => {
+      const b = [...document.querySelectorAll("main button")].find((el) => el.textContent?.trim() === "Encrypt");
+      return b && !b.hasAttribute("aria-disabled");
+    },
+    null,
+    { timeout: 10_000 },
+  );
+  assert((await encrypt.getAttribute("data-gl")) === "off", "an unblocked Encrypt must still be flat without WebGL");
 
   // Marketplace: open the first listing and open the purchase dialog.
   await page.goto(baseUrl + "/marketplace");
@@ -42,14 +62,19 @@ export default async function noWebgl({ baseUrl, accounts, assert, waitForWallet
   await buy.click();
   await page.getByRole("dialog").getByText("Confirm purchase").first().waitFor({ state: "visible", timeout: 10_000 });
 
-  // With WebGL available, the visible primary button gets a live context.
+  // With WebGL available, Encrypt gets a live context once it is unblocked (a blocked button never takes one).
   const normal = await newPage({ account: accounts.seller });
   await normal.goto(baseUrl + "/upload");
-  const live = normal.locator("main").getByRole("button", { name: "Create dataset" });
+  const normalMain = normal.locator("main");
+  const live = normalMain.getByRole("button", { name: "Encrypt", exact: true });
   await live.waitFor({ state: "visible", timeout: 25_000 });
+  await normalMain.getByLabel("Dataset name").fill("WebGL dataset");
+  await normalMain.getByLabel("Description").fill("Bills read with WebGL.");
+  await fillBill(normalMain);
+  await live.scrollIntoViewIfNeeded();
   await normal.waitForFunction(
     () => {
-      const b = [...document.querySelectorAll("main button")].find((el) => el.textContent?.includes("Create dataset"));
+      const b = [...document.querySelectorAll("main button")].find((el) => el.textContent?.trim() === "Encrypt");
       return b?.getAttribute("data-gl") === "on";
     },
     null,
@@ -57,4 +82,11 @@ export default async function noWebgl({ baseUrl, accounts, assert, waitForWallet
   );
   const liveCount = await normal.evaluate(() => document.querySelectorAll('[data-gl="on"]').length);
   assert(liveCount <= 8, `at most 8 live button contexts, got ${liveCount}`);
+}
+
+/** Types a valid bill into the review form (no OCR: this script is about the buttons). */
+async function fillBill(main) {
+  await main.getByLabel("Total amount").fill("120.00");
+  await main.getByLabel("Date").fill("2026-10-01");
+  await main.getByRole("radio", { name: "Utilities" }).click();
 }
