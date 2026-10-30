@@ -71,20 +71,29 @@ export default async function shell({ baseUrl, accounts, assert, waitForWallet, 
     await page.getByText("Simulated failure: execution reverted.").waitFor({ state: "visible", ...T });
     await page.getByRole("button", { name: "Try again" }).waitFor({ state: "visible", ...T });
 
-    // Fail the next read on /my-datasets: the failed read shows its error state with Try again ("Couldn't
-    // refresh" when data is already on screen, which must never be replaced by the error card).
+    // Fail the next read on /my-datasets. Its two sections load independently, and the Sold line reads activity
+    // outside them (a failed activity read is silent by design). Every stub read has the same latency, so the
+    // failure is armed on Home, which reads nothing, and the first read My Datasets starts (Listed by me) is the
+    // one that fails: that section shows its error with Try again while Bought by me still renders.
+    await page.locator("header").getByRole("link", { name: "Opaquely" }).click();
+    await page.waitForURL((u) => u.pathname === "/", { timeout: 15_000 });
+    await page.locator("footer").getByLabel("Fail the next read (demo)").check();
     await nav.getByRole("link", { name: "My Datasets" }).click();
     await page.waitForURL((u) => u.pathname === "/my-datasets", { timeout: 15_000 });
-    await page.getByText("Groceries Q3").waitFor({ state: "visible", ...LONG });
-    await page.getByLabel("Fail the next read (demo)").check();
-    await page.getByText(/Could not load|Couldn't refresh/).first().waitFor({ state: "visible", ...T });
-    await page.getByRole("button", { name: "Try again" }).first().click();
-    await page.getByText(/Could not load|Couldn't refresh/).first().waitFor({ state: "detached", ...T });
-    await page.getByText("Groceries Q3").waitFor({ state: "visible", ...T });
+    const main = page.locator("main");
+    const listed = main.locator("section", { has: page.getByRole("heading", { name: "Listed by me", level: 2 }) });
+    const bought = main.locator("section", { has: page.getByRole("heading", { name: "Bought by me", level: 2 }) });
+    await listed.getByText(/Could not load|Couldn't refresh/).first().waitFor({ state: "visible", ...LONG });
+    await listed.getByText("Could not load your datasets").waitFor({ state: "visible", ...T });
+    await bought.getByTestId("bought-dataset").first().waitFor({ state: "visible", ...LONG });
+    await listed.getByRole("button", { name: "Try again" }).click();
+    await listed.getByText(/Could not load|Couldn't refresh/).first().waitFor({ state: "detached", ...T });
+    await listed.getByText("Groceries Q3").waitFor({ state: "visible", ...T });
 
-    // Empty wallet: the empty state shows without a rebuild.
-    await page.getByLabel("Start from an empty wallet (demo)").check();
-    await page.getByText("No datasets yet").waitFor({ state: "visible", ...T });
+    // Empty wallet: each section shows its own empty state without a rebuild.
+    await page.locator("footer").getByLabel("Start from an empty wallet (demo)").check();
+    await listed.getByText("No datasets yet").waitFor({ state: "visible", ...T });
+    await bought.getByText("No purchases yet").waitFor({ state: "visible", ...T });
   }
 
   // ---- No role UI anywhere ----
