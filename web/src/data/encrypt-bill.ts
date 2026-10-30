@@ -11,6 +11,17 @@ export interface EncryptBillInput {
 }
 
 /**
+ * A dataset-create transaction that was sent but whose wait failed (a dropped connection, say). The caller keeps
+ * it between attempts so a retry waits on the same transaction instead of creating a second dataset.
+ */
+export interface PendingCreate {
+  /** The create sent by an earlier attempt, if its outcome is still unknown. */
+  handle?: TxHandle | null;
+  /** Reports a create as soon as it is sent, and null once it is known to have created nothing (reverted). */
+  onSent?: (handle: TxHandle | null) => void;
+}
+
+/**
  * One Encrypt press: create the dataset when there is none yet, then add the bill to it.
  *
  * The new id is reported through onCreated as soon as the create is confirmed and before the bill is sent, so a
@@ -21,12 +32,22 @@ export async function sendEncryptBill(
   layer: Pick<DataLayer, "createDataset" | "addBill">,
   input: EncryptBillInput,
   onCreated: (id: string) => void,
+  pending: PendingCreate = {},
 ): Promise<TxHandle> {
   let datasetId = input.datasetId;
   if (datasetId === null) {
-    const created = await layer.createDataset({ name: input.name.trim() });
+    // A create that was sent by an earlier attempt is waited on again, never sent a second time.
+    let created = pending.handle ?? null;
+    if (!created) {
+      created = await layer.createDataset({ name: input.name.trim() });
+      pending.onSent?.(created);
+    }
     const receipt = await created.wait();
-    if (receipt.status === "reverted") throw new Error("Creating the dataset was reverted.");
+    if (receipt.status === "reverted") {
+      // Nothing was created, so the next attempt may send a fresh create.
+      pending.onSent?.(null);
+      throw new Error("Creating the dataset was reverted.");
+    }
     if (!receipt.createdId) throw new Error("The dataset was created but its dataset id was not returned. Reload My Datasets before you try again.");
     datasetId = receipt.createdId;
     onCreated(datasetId);

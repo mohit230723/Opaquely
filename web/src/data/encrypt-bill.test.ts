@@ -91,4 +91,43 @@ describe("sendEncryptBill", () => {
     await sendEncryptBill(layer, { datasetId: null, name: "  Groceries Q3  ", fields }, () => {});
     expect(layer.createDataset).toHaveBeenCalledWith({ name: "Groceries Q3" });
   });
+
+  it("waits on a create that was sent earlier instead of sending a second one", async () => {
+    const layer = fakeLayer();
+    let pendingHandle: TxHandle | null = null;
+    const onSent = (h: TxHandle | null) => {
+      pendingHandle = h;
+    };
+    // First attempt: the create is sent, then waiting for it fails.
+    layer.createDataset.mockImplementationOnce(async () => ({
+      hash: "0xc1",
+      wait: async () => {
+        throw new Error("network dropped");
+      },
+    }));
+    await expect(
+      sendEncryptBill(layer, { datasetId: null, name: "n", fields }, () => {}, { handle: pendingHandle, onSent }),
+    ).rejects.toThrow("network dropped");
+    expect(layer.createDataset).toHaveBeenCalledTimes(1);
+    expect(pendingHandle).not.toBeNull();
+
+    // Retry: the same transaction is waited on again (now it confirms), and no second create is sent.
+    const sent = pendingHandle as unknown as TxHandle;
+    const retried: TxHandle = { hash: sent.hash, wait: async () => ({ status: "success", blockNumber: 1n, createdId: "new-1" }) };
+    const onCreated = vi.fn();
+    await sendEncryptBill(layer, { datasetId: null, name: "n", fields }, onCreated, { handle: retried, onSent });
+    expect(layer.createDataset).toHaveBeenCalledTimes(1);
+    expect(onCreated).toHaveBeenCalledWith("new-1");
+    expect(layer.addBill).toHaveBeenCalledWith("new-1", fields);
+  });
+
+  it("forgets a reverted create, so the next attempt may create again", async () => {
+    const layer = fakeLayer();
+    layer.createDataset.mockImplementationOnce(async () => handle("0xc1", { status: "reverted" }));
+    const onSent = vi.fn();
+    await expect(
+      sendEncryptBill(layer, { datasetId: null, name: "n", fields }, () => {}, { onSent }),
+    ).rejects.toThrow(/reverted/i);
+    expect(onSent).toHaveBeenLastCalledWith(null);
+  });
 });

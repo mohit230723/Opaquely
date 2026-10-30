@@ -7,7 +7,7 @@ import { recordSessionBill } from "@/lib/session-bills";
 import { sendEncryptBill } from "./encrypt-bill";
 import { useDataLayer, useDataScope } from "./provider";
 import { queryKeys } from "./keys";
-import type { BillDraft } from "./types";
+import type { BillDraft, TxHandle } from "./types";
 
 /** What every write hook returns: { state, run(input), reset() } from useTx. */
 export type TxController<I> = UseTx<I>;
@@ -165,6 +165,8 @@ export function useEncryptBill(
   const queryClient = useQueryClient();
   // The id created by this hook, so a retry or the confirm handler has it before the parent re-renders.
   const createdRef = useRef<string | null>(null);
+  // A create that was sent but not seen to confirm: a retry waits on it instead of creating a second dataset.
+  const pendingCreateRef = useRef<TxHandle | null>(null);
   return useTx(
     ({ draft }: { draft: BillDraft; index: number }) =>
       sendEncryptBill(
@@ -176,7 +178,14 @@ export function useEncryptBill(
         },
         (id) => {
           createdRef.current = id;
+          pendingCreateRef.current = null;
           opts.onDatasetCreated(id);
+        },
+        {
+          handle: pendingCreateRef.current,
+          onSent: (h) => {
+            pendingCreateRef.current = h;
+          },
         },
       ),
     {
