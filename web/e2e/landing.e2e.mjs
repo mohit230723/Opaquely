@@ -78,6 +78,27 @@ export default async function landing({ baseUrl, accounts, assert, waitForWallet
   assert(rel.includes("noopener") && rel.includes("noreferrer"), `footer GitHub rel must include noopener noreferrer, got "${rel}"`);
   await anon.evaluate(() => window.scrollTo(0, 0));
 
+  // D-07: after How it works, Home continues with the privacy, tech and closing sections (all `ul`, so the
+  // six steps stay the only `ol > li`).
+  const main = anon.locator("main");
+  for (const name of ["What never leaves your browser", "Built with", "Try it with test ETH"]) {
+    await main.getByRole("heading", { level: 2, name, exact: true }).waitFor({ state: "attached", timeout: 10_000 });
+  }
+  assert((await anon.locator("ol > li").count()) === 6, "the new sections must not add ordered-list items");
+  // The hero and the header repeat both CTA names, so scope to the closing band.
+  const closing = main.locator("section", { has: anon.getByRole("heading", { name: "Try it with test ETH", exact: true }) });
+  assert((await closing.getByRole("link", { name: "Upload", exact: true }).getAttribute("href")) === "/upload", "closing Upload must link to /upload");
+  assert(
+    (await closing.getByRole("link", { name: "Browse marketplace", exact: true }).getAttribute("href")) === "/marketplace",
+    "closing Browse marketplace must link to /marketplace",
+  );
+
+  // D-08: at 1280x900 and scroll 0 the footer is below the fold on Home.
+  assert((await anon.evaluate(() => window.scrollY)) === 0, "expected scroll 0 before the fold check");
+  const footerBox = await footer.boundingBox();
+  assert(footerBox !== null, "footer has no bounding box");
+  assert(footerBox.y > 900, `footer top should be below the 900px viewport at scroll 0, got ${footerBox.y}`);
+
   // A connected wallet with nothing stored goes straight to the Marketplace (no role chooser).
   const buyer = await newPage({ account: accounts.buyer });
   await buyer.goto(baseUrl + "/");
