@@ -2,10 +2,9 @@
 
 import { useMemo } from "react";
 import { AccountStats, AccountStatsSkeleton } from "@/components/account/AccountStats";
+import { TransactionsPanel } from "@/components/account/TransactionsPanel";
 import { WalletCard } from "@/components/account/WalletCard";
-import { ActivityTimeline } from "@/components/ActivityTimeline";
 import { AsyncBoundary } from "@/components/AsyncBoundary";
-import { EmptyState } from "@/components/EmptyState";
 import { PageShell } from "@/components/PageShell";
 import { Skeleton } from "@/components/Skeleton";
 import { Card } from "@/components/ui/Card";
@@ -37,7 +36,8 @@ function ActivitySkeleton() {
 
 /**
  * My Account: who this wallet is, what it earned, what it can withdraw, what it spent and bought, and its
- * transactions. Every derived figure comes from deriveSales over reads that already exist. The stats render
+ * transactions (this wallet's listings, purchases and withdrawals, plus purchases of its listings, paged by 20).
+ * Every derived figure comes from deriveSales over reads that already exist. The stats render
  * from useSellerStats; earned, withdrawn and spent fill in from the activity and purchase reads, and a failed
  * activity read leaves them at 0 ETH without blanking the page.
  */
@@ -93,15 +93,10 @@ export default function AccountPage() {
           <h2 id="transactions" className="text-lg font-semibold">
             Transactions
           </h2>
+          <p className="mt-1 text-sm text-muted">Your listings, sales, purchases and withdrawals.</p>
           <div className="mt-4">
-            <AsyncBoundary
-              query={activity}
-              thing="activity"
-              skeleton={<ActivitySkeleton />}
-              isEmpty={(data) => data.length === 0}
-              empty={<EmptyState heading="No activity yet">Listings, purchases and withdrawals show up here.</EmptyState>}
-            >
-              {(data) => <ActivityTimeline events={data} me={address} />}
+            <AsyncBoundary query={activity} thing="activity" skeleton={<ActivitySkeleton />}>
+              {() => <TransactionsPanel key={address ?? "none"} events={sales.myHistory} me={address} />}
             </AsyncBoundary>
           </div>
         </section>

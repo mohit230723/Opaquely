@@ -1,9 +1,13 @@
-// The whole Phase 1 demo in one tab: the seller adds a bill, checks the chain view and lists a dataset;
-// the buyer (second account) buys it; the seller withdraws; the activity timeline tells the story.
-// Privacy proof: no POST leaves the page and the typed vendor and amount never reach storage or the console.
+// The whole demo story in one tab on the Phase 7 pages, with no role anywhere: the seller resumes a draft in
+// Upload, encrypts a bill and sees its chain row, lists another draft with List to Marketplace; the buyer (a
+// second wallet) buys it with Buy this dataset and finds it under Bought by me; My Account shows each wallet's
+// own history; the seller withdraws.
+// Privacy proof: no POST leaves the page and the typed vendor and amount never reach storage or the console,
+// and the app keeps no localStorage key of its own.
 //
-// Stub state lives in page memory, so after the first page.goto the script only uses in-app links and
-// the wallet stub's setAccount; a reload would reseed the stub.
+// Stub state lives in page memory, so after the first page.goto the script only uses in-app links and the wallet
+// stub's setAccount; a reload would reseed the stub. Every link and button lookup is scoped to header, main, a
+// dialog or a card: the footer repeats the nav link names.
 
 const T = { timeout: 10_000 };
 const LONG = { timeout: 25_000 };
@@ -20,7 +24,7 @@ const short = (a) => `${a.slice(0, 6)}…${a.slice(-4)}`;
 
 export default async function walkthrough({ baseUrl, accounts, assert, waitForWallet, newPage }) {
   const { seller, buyer } = accounts;
-  const page = await newPage({ account: seller, roles: { [seller]: "seller" }, viewport: { width: 1280, height: 900 } });
+  const page = await newPage({ account: seller, viewport: { width: 1280, height: 900 } });
 
   const posts = [];
   const consoleLines = [];
@@ -31,100 +35,121 @@ export default async function walkthrough({ baseUrl, accounts, assert, waitForWa
   });
   page.on("console", (m) => consoleLines.push(m.text()));
 
-  const nav = (role) => page.getByRole("navigation", { name: role });
+  const main = page.locator("main");
+  const primary = page.locator("header").getByRole("navigation", { name: "Primary" });
   const switchTo = (address) => page.evaluate((a) => window.__opaquelyE2E.setAccount(a), address);
+  const listedCard = (name) => main.getByTestId("listed-dataset").filter({ hasText: name });
+  const encryptedBills = main.locator("section", { has: page.getByRole("heading", { level: 2, name: "Encrypted bills" }) });
+  const billRow = (n) => encryptedBills.locator("li").filter({ has: page.getByRole("heading", { level: 3, name: "Bill " + n }) });
+  // The value p beside a stat caption (the stat cards keep label, value and caption in one parent).
+  const statWait = (caption, expected) =>
+    page.waitForFunction(
+      ([c, e]) => {
+        const p = [...document.querySelectorAll("main p")].find((x) => x.textContent === c);
+        return p?.parentElement?.querySelector("p.tabular-nums")?.textContent === e;
+      },
+      [caption, expected],
+      LONG,
+    );
+  const goPrimary = async (name, pathname) => {
+    await primary.getByRole("link", { name, exact: true }).click({ timeout: 25_000 });
+    await page.waitForURL((u) => u.pathname === pathname, { timeout: 15_000 });
+  };
+  const resumeInUpload = async (name, id) => {
+    const card = listedCard(name);
+    await card.waitFor({ state: "visible", ...LONG });
+    await card.getByRole("link", { name: "Continue in Upload" }).click();
+    await page.waitForURL((u) => u.pathname === "/upload" && u.searchParams.get("dataset") === id, { timeout: 15_000 });
+    await page.waitForFunction(
+      (n) => document.querySelector('main input[name="dataset-name"]')?.value === n,
+      name,
+      LONG,
+    );
+  };
 
-  // ---- a. seller: add a bill, then look at the chain view ----
-  await page.goto(baseUrl + "/sell");
+  // ---- a. seller: resume a draft in Upload, encrypt a bill, see its chain row ----
+  await page.goto(baseUrl + "/my-datasets");
   await waitForWallet(page, seller);
-  await page.getByText("Withdrawable balance").waitFor({ state: "visible", ...LONG });
+  await main.getByRole("heading", { name: "Listed by me", level: 2 }).waitFor({ state: "visible", ...LONG });
+  await resumeInUpload("Household utilities 2026", "household-utilities-2026");
 
-  await nav("Seller").getByRole("link", { name: "Datasets" }).click();
-  await page.waitForURL((u) => u.pathname === "/sell/datasets", { timeout: 15_000 });
-  const utilities = page.locator("tr", { hasText: "Household utilities 2026" });
-  await utilities.getByRole("link", { name: "Add bill" }).click({ timeout: 25_000 });
+  await main.getByLabel("Vendor (optional)").fill(VENDOR);
+  await main.getByLabel("Total amount").fill(AMOUNT_TEXT);
+  await main.getByLabel("Date").fill("2026-10-01");
+  await main.getByRole("radio", { name: "Utilities" }).click();
+  await main.getByRole("button", { name: "Encrypt", exact: true }).click();
+  await main.getByText("Transaction confirmed").waitFor({ state: "visible", ...LONG });
+  await main.getByText("Bill encrypted. This dataset has 2 bills.").waitFor({ state: "visible", ...T });
 
-  await page.getByLabel("Vendor (optional)").fill(VENDOR);
-  await page.getByLabel("Total amount").fill(AMOUNT_TEXT);
-  await page.getByLabel("Date").fill("2026-10-01");
-  await page.getByRole("radio", { name: "Utilities" }).click();
-  await page.getByRole("button", { name: "Add bill to dataset" }).click();
-  await page.getByText("Transaction confirmed").waitFor({ state: "visible", ...T });
-  await page.getByText("Bill added. This dataset now has 2 bills.").waitFor({ state: "visible", ...T });
+  await billRow(2).getByText(VENDOR).waitFor({ state: "visible", ...T });
+  await billRow(2).getByText("₹" + AMOUNT_TEXT).waitFor({ state: "visible", ...T });
+  await billRow(1).getByText("Not available after reload").waitFor({ state: "visible", ...T });
 
-  await page.getByRole("link", { name: "Back to dataset" }).click();
-  await page.getByRole("link", { name: "Chain view" }).first().click({ timeout: 25_000 });
-  await page.getByText("Bill 2", { exact: true }).waitFor({ state: "visible", ...LONG });
-  const bill2 = page.locator("li", { has: page.getByRole("heading", { name: "Bill 2" }) });
-  const bill1 = page.locator("li", { has: page.getByRole("heading", { name: "Bill 1" }) });
-  await bill2.getByText(VENDOR).waitFor({ state: "visible", ...T });
-  await bill2.getByText("₹" + AMOUNT_TEXT).waitFor({ state: "visible", ...T });
-  await bill1.getByText("Not available after reload").waitFor({ state: "visible", ...T });
+  // ---- b. seller: list Groceries Q3 from its card with List to Marketplace ----
+  await goPrimary("My Datasets", "/my-datasets");
+  await resumeInUpload("Groceries Q3", "groceries-q3");
+  await main.getByLabel("Description").fill("Three grocery bills from one household.");
+  await main.getByLabel("Price (ETH)").fill("0.05");
+  await main.getByRole("button", { name: "List to Marketplace", exact: true }).click();
+  const listDialog = page.getByRole("dialog");
+  await listDialog.getByRole("heading", { name: 'List "Groceries Q3"?' }).waitFor({ state: "visible", ...T });
+  await listDialog.getByRole("button", { name: "List to Marketplace", exact: true }).click();
+  await listDialog.getByText("Transaction confirmed").waitFor({ state: "visible", ...LONG });
+  await page.waitForURL((u) => u.pathname === "/marketplace", { timeout: 15_000 });
 
-  // ---- b. seller: list a dataset ----
-  await nav("Seller").getByRole("link", { name: "Datasets" }).click();
-  await page.waitForURL((u) => u.pathname === "/sell/datasets", { timeout: 15_000 });
-  const groceriesQ3 = page.locator("tr", { hasText: "Groceries Q3" });
-  await groceriesQ3.getByRole("link", { name: "List dataset" }).click({ timeout: 25_000 });
-  await page.getByLabel("Title").fill("Walkthrough groceries");
-  await page.getByLabel("Description").fill("Three grocery bills from one household.");
-  await page.getByLabel("Price (ETH)").fill("0.05");
-  await page.getByRole("button", { name: "List dataset" }).click();
-  await page.getByRole("button", { name: "Seal and list dataset" }).click();
-  await page.getByText("Transaction confirmed").waitFor({ state: "visible", ...T });
-  await page.getByRole("button", { name: "View my datasets" }).click();
-  await page.waitForURL((u) => u.pathname === "/sell/datasets", { timeout: 15_000 });
-  await page.locator("tr", { hasText: "Groceries Q3" }).getByText("Listed").waitFor({ state: "visible", ...LONG });
-
-  // ---- c. switch to the buyer account in the same tab ----
+  // ---- c. switch to the buyer wallet in the same tab (no role step) ----
   await switchTo(buyer);
   await waitForWallet(page, buyer);
-  await page.waitForURL((u) => u.pathname === "/role", { timeout: 25_000 });
-  await page.getByText(/Continue as Buyer/).first().click();
-  await page.waitForURL((u) => u.pathname === "/buy", { timeout: 15_000 });
+  assert(new URL(page.url()).pathname === "/marketplace", "switching wallets must not leave the Marketplace");
 
-  // ---- d. buyer: find the new listing and buy it ----
-  await page.getByLabel("Search").fill("Walkthrough groceries");
-  await page.getByText(/^Showing 1 of \d+ datasets?$/).waitFor({ state: "visible", ...LONG });
-  await page.getByRole("link", { name: /Walkthrough groceries/ }).click();
-  await page.getByRole("button", { name: "Buy dataset" }).click({ timeout: 25_000 });
-  await page.getByRole("button", { name: "Pay 0.05 ETH" }).click();
-  await page.getByText("Access granted.", { exact: true }).waitFor({ state: "visible", ...LONG });
-  await page.getByRole("button", { name: "View my purchases" }).click();
-  await page.waitForURL((u) => u.pathname === "/buy/purchases", { timeout: 15_000 });
-  const purchase = page.locator("li", { hasText: "Walkthrough groceries" });
-  await purchase.getByText("Walkthrough groceries").first().waitFor({ state: "visible", ...LONG });
-  await purchase.getByText("Paid 0.05 ETH").waitFor({ state: "visible", ...T });
-  await purchase.getByText("Access granted", { exact: true }).waitFor({ state: "visible", ...T });
+  // ---- d. buyer: buy Groceries Q3 from its card, then find it under Bought by me ----
+  const card = main
+    .locator('li[data-testid="listing-card"]')
+    .filter({ has: page.getByRole("link", { name: "Groceries Q3", exact: true }) });
+  await card.waitFor({ state: "visible", ...LONG });
+  await card.getByRole("button", { name: "Buy this dataset" }).click({ timeout: 25_000 });
+  const buyDialog = page.getByRole("dialog", { name: "Confirm purchase" });
+  await buyDialog.waitFor({ state: "visible", ...T });
+  await buyDialog.getByRole("button", { name: "Pay 0.05 ETH" }).click();
+  await buyDialog.getByText("Access granted.", { exact: true }).waitFor({ state: "visible", ...LONG });
+  await buyDialog.getByRole("button", { name: "View my datasets" }).click();
+  await page.waitForURL((u) => u.pathname === "/my-datasets", { timeout: 15_000 });
+  const bought = main.getByTestId("bought-dataset").filter({ hasText: "Groceries Q3" });
+  await bought.waitFor({ state: "visible", ...LONG });
+  await bought.getByText(/^Paid 0\.05 ETH$/).waitFor({ state: "visible", ...T });
+  await bought.getByText("Access granted", { exact: true }).waitFor({ state: "visible", ...T });
 
-  // ---- e. buyer: the timeline shows the purchase first and the seller's listing below it ----
-  await nav("Buyer").getByRole("link", { name: "Activity" }).click();
-  await page.waitForURL((u) => u.pathname === "/activity", { timeout: 15_000 });
-  await page.getByText('You bought "Walkthrough groceries" for 0.05 ETH').waitFor({ state: "visible", ...LONG });
-  const buyerItems = await page.locator("ol > li").allTextContents();
+  // ---- e. buyer: My Account's Transactions starts with the purchase and holds only this wallet's history ----
+  await goPrimary("My Account", "/account");
+  await main.getByText('You bought "Groceries Q3" for 0.05 ETH').waitFor({ state: "visible", ...LONG });
+  const buyerItems = await main.locator("ol > li").allTextContents();
   assert(
-    buyerItems[0].includes('You bought "Walkthrough groceries" for 0.05 ETH'),
+    buyerItems[0].startsWith('You bought "Groceries Q3"'),
     `the first timeline item must be the purchase, got: ${buyerItems[0]}`,
   );
   assert(
-    buyerItems.slice(1).some((t) => t.includes(`${short(seller)} listed "Walkthrough groceries" for 0.05 ETH`)),
-    "a later item must show the seller's listing with the seller's short address",
+    !buyerItems.some((t) => t.includes(`${short(seller)} listed`)),
+    "the buyer's history must not show another wallet's listing",
   );
 
-  // ---- f. back to the seller: withdraw the proceeds ----
+  // ---- f. back to the seller: withdraw the proceeds on My Account ----
   await switchTo(seller);
   await waitForWallet(page, seller);
-  await nav("Seller").getByRole("link", { name: "Dashboard" }).click({ timeout: 25_000 });
-  await page.waitForURL((u) => u.pathname === "/sell", { timeout: 15_000 });
-  await page.getByText("0.11 ETH").waitFor({ state: "visible", ...LONG });
-  await page.getByRole("button", { name: "Withdraw balance" }).click();
-  await page.getByText("Transaction confirmed").waitFor({ state: "visible", ...T });
-  await page.getByText("Nothing to withdraw yet.").waitFor({ state: "visible", ...T });
-  await nav("Seller").getByRole("link", { name: "Activity" }).click();
-  await page.waitForURL((u) => u.pathname === "/activity", { timeout: 15_000 });
-  await page.getByText("You withdrew 0.11 ETH").waitFor({ state: "visible", ...LONG });
-  const sellerItems = await page.locator("ol > li").allTextContents();
+  await goPrimary("My Account", "/account");
+  await statWait("Held until withdrawn", "0.11 ETH");
+  await main.getByRole("button", { name: "Withdraw balance" }).click();
+  await main.getByText("Transaction confirmed").waitFor({ state: "visible", ...LONG });
+  await main.getByText("Nothing to withdraw yet.").waitFor({ state: "visible", ...T });
+  await statWait("Held until withdrawn", "0 ETH");
+  await main.getByText("You withdrew 0.11 ETH").waitFor({ state: "visible", ...LONG });
+  // Withdrawn so far is its own figure: the seeded 0.04 ETH plus this 0.11 ETH.
+  await statWait("Already sent to your wallet", "0.15 ETH");
+  const sellerItems = await main.locator("ol > li").allTextContents();
   assert(sellerItems[0].includes("You withdrew 0.11 ETH"), `the first timeline item must be the withdrawal, got: ${sellerItems[0]}`);
+  assert(
+    sellerItems.slice(1).some((t) => t.includes(`${short(buyer)} bought "Groceries Q3" for 0.05 ETH`)),
+    "a later item must show the buyer's purchase of the seller's listing",
+  );
 
   // ---- g. privacy assertions ----
   assert(posts.length === 0, `no POST request may leave the page, saw: ${posts.join(", ")}`);
@@ -150,8 +175,7 @@ export default async function walkthrough({ baseUrl, accounts, assert, waitForWa
     }
   }
   const ownKeys = storage.local.map(([k]) => k).filter((k) => /^opaquely/i.test(k));
-  assert(ownKeys.every((k) => k.startsWith("opaquely:role:")), `unexpected app localStorage keys: ${ownKeys.join(", ")}`);
-  assert(ownKeys.length >= 1, "the role keys must be present");
+  assert(ownKeys.length === 0, `the app must keep no localStorage key of its own, found: ${ownKeys.join(", ")}`);
   assert(!storage.databases.some((n) => /^opaquely/i.test(n)), `no opaquely IndexedDB database may exist: ${storage.databases.join(", ")}`);
   console.log("  walkthrough localStorage keys: " + (storage.local.map(([k]) => k).join(", ") || "(none)"));
   console.log("  walkthrough sessionStorage keys: " + (storage.session.map(([k]) => k).join(", ") || "(none)"));
