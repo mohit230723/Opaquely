@@ -41,6 +41,19 @@ export default async function landing({ baseUrl, accounts, assert, waitForWallet
     "hero Browse marketplace must link to /marketplace",
   );
 
+  // D-07: Home has exactly one h1 (the tagline); the embossed wordmark band is artwork, not a heading.
+  assert((await anon.evaluate(() => document.querySelectorAll("h1").length)) === 1, "expected exactly one h1 on Home");
+
+  // D-07, D-10: the embossed Opaquely artwork sits in main under the hero. The footer logo is also named
+  // Opaquely, so the lookup is scoped to main.
+  const wordmark = anon.locator("main").getByRole("img", { name: "Opaquely", exact: true });
+  assert((await wordmark.count()) === 1, `expected one Opaquely image in main, got ${await wordmark.count()}`);
+  await wordmark.scrollIntoViewIfNeeded();
+  await wordmark.waitFor({ state: "visible", timeout: 10_000 });
+  const wordmarkSrc = (await wordmark.getAttribute("src")) ?? "";
+  assert(wordmarkSrc.includes("opaquely-embossed"), `wordmark src should be the embossed artwork, got "${wordmarkSrc}"`);
+  await anon.evaluate(() => window.scrollTo(0, 0));
+
   // LAND-02: "How it works" lists the six steps with their lines.
   await anon.getByRole("heading", { name: "How it works" }).waitFor({ state: "visible", timeout: 10_000 });
   for (const [title, line] of STEPS) {
