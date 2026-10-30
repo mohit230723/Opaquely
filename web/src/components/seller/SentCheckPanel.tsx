@@ -7,13 +7,11 @@ export type SentCheck = { hash: string; result: "checking" | "added" | "not_adde
 /** Shown under a failed add-bill transaction that was already sent: check the dataset before sending again. */
 export function SentCheckPanel({
   check,
-  datasetId,
   onCheck,
   onSendAgain,
   onAddAnother,
 }: {
   check: SentCheck | null;
-  datasetId: string;
   onCheck: () => void;
   onSendAgain: () => void;
   onAddAnother: () => void;
@@ -39,11 +37,8 @@ export function SentCheckPanel({
           <p className="text-sm">
             The dataset now holds {plural(check.billCount ?? 0, "bill")}, so this bill was added. Do not add it again.
           </p>
-          <div className="mt-3 flex flex-wrap gap-3">
+          <div className="mt-3">
             <Button onClick={onAddAnother}>Add another bill</Button>
-            <Button variant="secondary" href={`/sell/datasets/${datasetId}`}>
-              Back to dataset
-            </Button>
           </div>
         </>
       ) : (

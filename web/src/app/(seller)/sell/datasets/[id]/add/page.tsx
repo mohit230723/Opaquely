@@ -207,7 +207,6 @@ function AddBillScreen({ datasetId, billCount }: { datasetId: string; billCount:
           {sentButUnconfirmed ? (
             <SentCheckPanel
               check={check}
-              datasetId={datasetId}
               onCheck={() => void checkStatus()}
               onSendAgain={sendAgain}
               onAddAnother={addAnother}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type Ref } from "react";
 import { Field } from "@/components/ui/Field";
 import { DESCRIPTION_ERROR, DESCRIPTION_MAX } from "@/lib/validate-listing";
 import { NAME_ERROR, NAME_MAX, validDatasetDescription, validDatasetName } from "@/lib/validate-dataset";
@@ -17,6 +17,8 @@ export function DescribeStep({
   onNameChange,
   onDescriptionChange,
   nameLocked,
+  descriptionRef,
+  showDescriptionError = false,
 }: {
   n: number;
   name: string;
@@ -25,11 +27,16 @@ export function DescribeStep({
   onDescriptionChange: (value: string) => void;
   /** True once the dataset exists (or while the first Encrypt is creating it). */
   nameLocked: boolean;
+  /** Lets a later step (List to Marketplace) focus the description when it blocks listing. */
+  descriptionRef?: Ref<HTMLInputElement & HTMLTextAreaElement>;
+  /** Shows the description error even before the field was left, for example after a blocked listing. */
+  showDescriptionError?: boolean;
 }) {
   const [nameLeft, setNameLeft] = useState(false);
   const [descriptionLeft, setDescriptionLeft] = useState(false);
   const nameError = nameLeft && !validDatasetName(name) ? NAME_ERROR : undefined;
-  const descriptionError = descriptionLeft && !validDatasetDescription(description) ? DESCRIPTION_ERROR : undefined;
+  const descriptionError =
+    (descriptionLeft || showDescriptionError) && !validDatasetDescription(description) ? DESCRIPTION_ERROR : undefined;
 
   return (
     <StepSection n={n} id="step-describe" title="Describe your dataset">
@@ -51,6 +58,7 @@ export function DescribeStep({
           onBlur={() => setNameLeft(true)}
         />
         <Field
+          ref={descriptionRef}
           label="Description"
           name="dataset-description"
           multiline

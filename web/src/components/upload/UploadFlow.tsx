@@ -1,10 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { PageShell } from "@/components/PageShell";
 import { validDatasetDescription, validDatasetName } from "@/lib/validate-dataset";
 import { DescribeStep } from "./DescribeStep";
 import { EncryptBillStep } from "./EncryptBillStep";
+import { ListPanel } from "./ListPanel";
 
 const DESCRIBE_FIRST = "Add a name and description first.";
 
@@ -18,6 +19,8 @@ export function UploadFlow() {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [encrypting, setEncrypting] = useState(false);
+  const [listAttempted, setListAttempted] = useState(false);
+  const descriptionRef = useRef<HTMLInputElement & HTMLTextAreaElement>(null);
 
   const describeOk = validDatasetName(name) && validDatasetDescription(description);
 
@@ -31,6 +34,8 @@ export function UploadFlow() {
           onNameChange={setName}
           onDescriptionChange={setDescription}
           nameLocked={datasetId !== null || encrypting}
+          descriptionRef={descriptionRef}
+          showDescriptionError={listAttempted}
         />
         <EncryptBillStep
           n={2}
@@ -39,6 +44,16 @@ export function UploadFlow() {
           blockedReason={describeOk ? undefined : DESCRIBE_FIRST}
           onDatasetCreated={setDatasetId}
           onBusyChange={setEncrypting}
+        />
+        <ListPanel
+          n={4}
+          datasetId={datasetId}
+          name={name}
+          description={description}
+          onDescriptionInvalid={() => {
+            setListAttempted(true);
+            descriptionRef.current?.focus();
+          }}
         />
       </div>
     </PageShell>

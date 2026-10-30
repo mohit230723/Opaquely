@@ -79,5 +79,59 @@ export default async function uploadFlow({ baseUrl, accounts, assert, waitForWal
     "the two-prompt note is only for the first Encrypt",
   );
 
+  // Step 4 (amendment A1): the price is editable from the start; only List to Marketplace waits for 3 bills.
+  await main.getByRole("heading", { level: 2, name: "Set your price" }).waitFor({ state: "visible", ...T });
+  const priceField = main.getByLabel("Price (ETH)");
+  await priceField.waitFor({ state: "visible", ...T });
+  assert((await priceField.getAttribute("readonly")) === null, "the price field must be editable before 3 bills");
+  const listButton = main.getByRole("button", { name: "List to Marketplace", exact: true });
+  assert((await listButton.getAttribute("aria-disabled")) === "true", "List to Marketplace must be blocked under 3 bills");
+  await main.getByText("Add at least 3 bills before listing. This dataset has 1.").waitFor({ state: "visible", ...T });
+
+  // Bills 2 and 3, typed by hand.
+  async function addBillByHand(amount, date, category, count) {
+    await main.getByLabel("Total amount").fill(amount);
+    await main.getByLabel("Date").fill(date);
+    await main.getByRole("radio", { name: category }).click();
+    assert((await encrypt.getAttribute("aria-disabled")) === null, `Encrypt must be enabled for bill ${count}`);
+    await encrypt.click();
+    await main.getByText(`Bill encrypted. This dataset has ${count} bills.`).waitFor({ state: "visible", timeout: 20_000 });
+  }
+  await addBillByHand("420.00", "2026-10-02", "Utilities", 2);
+  await main.getByText("Add at least 3 bills before listing. This dataset has 2.").waitFor({ state: "visible", ...T });
+  assert((await listButton.getAttribute("aria-disabled")) === "true", "List to Marketplace must stay blocked at 2 bills");
+  await main.getByRole("button", { name: "Add another bill" }).click();
+  await main.getByLabel("Total amount").waitFor({ state: "visible", ...T });
+  await addBillByHand("88.50", "2026-10-03", "Medical", 3);
+
+  // At 3 bills List to Marketplace unlocks; an empty price is refused with the unchanged copy.
+  await main.getByText("This dataset has 2.").waitFor({ state: "detached", ...T });
+  assert((await listButton.getAttribute("aria-disabled")) === null, "List to Marketplace must unlock at 3 bills");
+  await listButton.click();
+  await main.getByText("Enter a price greater than 0 ETH.").waitFor({ state: "visible", ...T });
+  await priceField.fill("0.05");
+  await main.getByText("Enter a price greater than 0 ETH.").waitFor({ state: "detached", ...T });
+  await listButton.click();
+
+  const dialog = page.getByRole("dialog");
+  await dialog.getByRole("heading", { name: `List "${datasetName}"?` }).waitFor({ state: "visible", ...T });
+  await dialog.getByText("Listing seals this dataset. You will not be able to add or remove bills afterwards.").waitFor({ state: "visible", ...T });
+  await dialog.getByTestId("categories-disclosure").waitFor({ state: "visible", ...T });
+  await dialog.getByRole("button", { name: "Keep editing dataset" }).waitFor({ state: "visible", ...T });
+
+  // A marker on window survives only a client-side move, so it proves the page never hard-reloaded.
+  await page.evaluate(() => {
+    window.__uploadFlowMarker = "kept";
+  });
+  await dialog.getByRole("button", { name: "List to Marketplace", exact: true }).click();
+  await dialog.getByText("Dataset listed for 0.05 ETH.").waitFor({ state: "visible", timeout: 20_000 });
+  await dialog.getByRole("link", { name: "Go to Marketplace" }).waitFor({ state: "visible", ...T });
+  await page.waitForURL((url) => url.pathname === "/marketplace", { timeout: 15_000 });
+  assert(
+    (await page.evaluate(() => window.__uploadFlowMarker)) === "kept",
+    "the move to /marketplace must be client-side (no hard reload)",
+  );
+  await page.locator("main").getByText(datasetName).first().waitFor({ state: "visible", timeout: 15_000 });
+
   assert(posts.length === 0, "no POST may leave the page, got " + posts.join(","));
 }

@@ -217,7 +217,6 @@ export function EncryptBillStep({
             {sentButUnconfirmed && datasetId ? (
               <SentCheckPanel
                 check={check}
-                datasetId={datasetId}
                 onCheck={() => void checkStatus()}
                 onSendAgain={sendAgain}
                 onAddAnother={addAnother}

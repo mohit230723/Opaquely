@@ -6,7 +6,7 @@ const noop = () => undefined;
 
 function render(check: SentCheck | null) {
   return renderToStaticMarkup(
-    <SentCheckPanel check={check} datasetId="d1" onCheck={noop} onSendAgain={noop} onAddAnother={noop} />,
+    <SentCheckPanel check={check} onCheck={noop} onSendAgain={noop} onAddAnother={noop} />,
   );
 }
 
@@ -23,6 +23,8 @@ describe("SentCheckPanel (WR-05)", () => {
     expect(html).toContain("4 bills");
     expect(html).toContain("Do not add it again");
     expect(html).not.toContain("Send again");
+    // Steps 3 and 4 are on the Upload page itself: no link back to the old dataset page.
+    expect(html).not.toContain("href=");
   });
 
   it("offers Send again only once the dataset shows the bill is missing", () => {
