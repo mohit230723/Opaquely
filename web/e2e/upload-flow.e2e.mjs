@@ -65,6 +65,17 @@ export default async function uploadFlow({ baseUrl, accounts, assert, waitForWal
     .getByText("Your bill was encrypted in this browser and added to the dataset's encrypted totals. The chain never saw the values.")
     .waitFor({ state: "visible", ...T });
   await main.getByText("Transaction confirmed").waitFor({ state: "visible", ...T });
+
+  // Step 3 shows the bill as this browser holds it beside the handles the chain stores.
+  const step3 = main.locator("section", { has: page.getByRole("heading", { level: 2, name: "Encrypted bills" }) });
+  await step3.getByRole("heading", { level: 3, name: "Bill 1" }).waitFor({ state: "visible", ...T });
+  await step3.getByText("What you see (this browser only)").first().waitFor({ state: "visible", ...T });
+  await step3.getByText("What the chain sees").first().waitFor({ state: "visible", ...T });
+  await step3.getByText("1 of 3 bills needed to list").waitFor({ state: "visible", ...T });
+  assert(
+    (await step3.getByText("Not available after reload").count()) === 0,
+    "a bill encrypted in this tab must show its values, not the after-reload note",
+  );
   assert(
     (await nameField.getAttribute("readonly")) !== null,
     "the dataset name must be read-only once the dataset exists",
@@ -104,8 +115,10 @@ export default async function uploadFlow({ baseUrl, accounts, assert, waitForWal
   await main.getByLabel("Total amount").waitFor({ state: "visible", ...T });
   await addBillByHand("88.50", "2026-10-03", "Medical", 3);
 
-  // At 3 bills List to Marketplace unlocks; an empty price is refused with the unchanged copy.
+  // At 3 bills List to Marketplace unlocks and the count line in step 3 is gone; an empty price is refused.
   await main.getByText("This dataset has 2.").waitFor({ state: "detached", ...T });
+  await step3.getByRole("heading", { level: 3, name: "Bill 3" }).waitFor({ state: "visible", ...T });
+  assert((await step3.getByText("bills needed to list").count()) === 0, "the count line must be hidden at 3 bills");
   assert((await listButton.getAttribute("aria-disabled")) === null, "List to Marketplace must unlock at 3 bills");
   await listButton.click();
   await main.getByText("Enter a price greater than 0 ETH.").waitFor({ state: "visible", ...T });
@@ -134,4 +147,49 @@ export default async function uploadFlow({ baseUrl, accounts, assert, waitForWal
   await page.locator("main").getByText(datasetName).first().waitFor({ state: "visible", timeout: 15_000 });
 
   assert(posts.length === 0, "no POST may leave the page, got " + posts.join(","));
+
+  // Resume an owned open draft from a link (fresh page, so this tab holds none of its bill values).
+  const resume = await newPage({ account: accounts.seller });
+  await resume.goto(baseUrl + "/upload?dataset=household-utilities-2026");
+  await waitForWallet(resume, accounts.seller);
+  const rmain = resume.locator("main");
+  await rmain.getByRole("heading", { level: 2, name: "Describe your dataset" }).waitFor({ state: "visible", timeout: 25_000 });
+  const rname = rmain.getByLabel("Dataset name");
+  await resume.waitForFunction(
+    () => document.querySelector('main input[name="dataset-name"]')?.value === "Household utilities 2026",
+    null,
+    T,
+  );
+  assert((await rname.getAttribute("readonly")) !== null, "a resumed draft's name must be read-only");
+  const rstep3 = rmain.locator("section", { has: resume.getByRole("heading", { level: 2, name: "Encrypted bills" }) });
+  await rstep3.getByRole("heading", { level: 3, name: "Bill 1" }).waitFor({ state: "visible", ...T });
+  await rstep3.getByText("Not available after reload").first().waitFor({ state: "visible", ...T });
+  await rstep3.getByText("1 of 3 bills needed to list").waitFor({ state: "visible", ...T });
+  assert(
+    (await rmain.getByText("The first Encrypt asks your wallet twice").count()) === 0,
+    "a resumed draft already exists, so there is no create prompt",
+  );
+
+  // One more bill through Encrypt.
+  const rencrypt = rmain.getByRole("button", { name: "Encrypt", exact: true });
+  await rmain.getByLabel("Total amount").fill("260.00");
+  await rmain.getByLabel("Date").fill("2026-10-04");
+  await rmain.getByRole("radio", { name: "Utilities" }).click();
+  assert((await rencrypt.getAttribute("aria-disabled")) === null, "Encrypt must be enabled on a resumed draft");
+  await rencrypt.click();
+  await rmain.getByText("Bill encrypted. This dataset has 2 bills.").waitFor({ state: "visible", timeout: 20_000 });
+  await rstep3.getByRole("heading", { level: 3, name: "Bill 2" }).waitFor({ state: "visible", ...T });
+  await rmain.getByText("Add at least 3 bills before listing. This dataset has 2.").waitFor({ state: "visible", ...T });
+
+  // An id that is not one of this wallet's open drafts is "Dataset not found", with a way back to a new upload.
+  await resume.goto(baseUrl + "/upload?dataset=nope");
+  await waitForWallet(resume, accounts.seller);
+  await rmain.getByRole("heading", { name: "Dataset not found" }).waitFor({ state: "visible", timeout: 25_000 });
+  assert(
+    (await rmain.getByRole("heading", { level: 2, name: "Describe your dataset" }).count()) === 0,
+    "no steps for an unknown dataset",
+  );
+  await rmain.getByRole("link", { name: "Upload", exact: true }).click();
+  await rmain.getByRole("heading", { level: 2, name: "Describe your dataset" }).waitFor({ state: "visible", ...T });
+  assert((await rmain.getByLabel("Dataset name").inputValue()) === "", "a new upload starts with an empty name");
 }
