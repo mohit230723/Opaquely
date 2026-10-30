@@ -27,6 +27,13 @@ export interface BillReviewFormProps {
    * empty, or still hold the previous suggestion, take the new values. What the seller typed is kept.
    */
   suggestion?: { n: number; fields: BillFormFields };
+  /** The submit button's label. */
+  submitLabel?: string;
+  /**
+   * When set, the submit button stays aria-disabled and this text replaces the missing-fields helper (for example
+   * "Add a name and description first." while the Upload page's first step is incomplete). Nothing is submitted.
+   */
+  blockedReason?: string;
 }
 
 type FieldName = keyof BillFormFields;
@@ -38,18 +45,38 @@ const EMPTY: BillFormFields = { vendor: "", amount: "", date: "", category: null
  * empty. Values live in component state only: no storage, no logging, no URL params.
  * The inner form is keyed by resetKey, so changing the key mounts a fresh, empty form.
  */
-export function BillReviewForm({ onSubmit, busy = false, resetKey = 0, suggestion }: BillReviewFormProps) {
-  return <ReviewFormBody key={resetKey} onSubmit={onSubmit} busy={busy} suggestion={suggestion} />;
+export function BillReviewForm({
+  onSubmit,
+  busy = false,
+  resetKey = 0,
+  suggestion,
+  submitLabel = "Encrypt",
+  blockedReason,
+}: BillReviewFormProps) {
+  return (
+    <ReviewFormBody
+      key={resetKey}
+      onSubmit={onSubmit}
+      busy={busy}
+      suggestion={suggestion}
+      submitLabel={submitLabel}
+      blockedReason={blockedReason}
+    />
+  );
 }
 
 function ReviewFormBody({
   onSubmit,
   busy,
   suggestion,
+  submitLabel,
+  blockedReason,
 }: {
   onSubmit: (draft: BillDraft) => void;
   busy: boolean;
   suggestion?: BillReviewFormProps["suggestion"];
+  submitLabel: string;
+  blockedReason?: string;
 }) {
   const [fields, setFields] = useState<BillFormFields>(EMPTY);
   // What the OCR suggestions put in the form, so a later one can tell untouched fields from typed ones.
@@ -93,7 +120,8 @@ function ReviewFormBody({
     if (busy) return;
     const checked = validateBillDraft(fields, new Date());
     if (checked.ok) {
-      onSubmit(checked.draft);
+      // Blocked by something outside the form (the reason is shown next to the button): send nothing.
+      if (!blockedReason) onSubmit(checked.draft);
       return;
     }
     touch("vendor", "amount", "date", "category");
@@ -182,10 +210,14 @@ function ReviewFormBody({
         ) : null}
       </div>
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-        <Button type="submit" loading={busy} disabled={!result.ok}>
-          Add bill to dataset
+        <Button type="submit" loading={busy} disabled={!result.ok || Boolean(blockedReason)}>
+          {submitLabel}
         </Button>
-        {!result.ok ? <p className="text-sm text-muted">Enter an amount, a date and a category to continue.</p> : null}
+        {blockedReason ? (
+          <p className="text-sm text-muted">{blockedReason}</p>
+        ) : !result.ok ? (
+          <p className="text-sm text-muted">Enter an amount, a date and a category to continue.</p>
+        ) : null}
       </div>
     </form>
   );

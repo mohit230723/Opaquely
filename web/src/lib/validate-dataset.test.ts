@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { NAME_ERROR, NAME_MAX, validDatasetName } from "./validate-dataset";
+import { NAME_ERROR, NAME_MAX, validDatasetDescription, validDatasetName } from "./validate-dataset";
 
 describe("validDatasetName", () => {
   it("rejects an empty or blank name", () => {
@@ -20,5 +20,15 @@ describe("validDatasetName", () => {
   it("keeps the Phase 1 copy and limit", () => {
     expect(NAME_ERROR).toBe("Give your dataset a name (1 to 60 characters).");
     expect(NAME_MAX).toBe(60);
+  });
+});
+
+describe("validDatasetDescription", () => {
+  it("accepts 1 to 300 characters after trimming and rejects blank or longer", () => {
+    expect(validDatasetDescription("")).toBe(false);
+    expect(validDatasetDescription("  ")).toBe(false);
+    expect(validDatasetDescription("d")).toBe(true);
+    expect(validDatasetDescription("d".repeat(300))).toBe(true);
+    expect(validDatasetDescription("d".repeat(301))).toBe(false);
   });
 });

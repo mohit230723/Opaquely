@@ -1,8 +1,10 @@
 "use client";
 
+import { useRef } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTx, type UseTx } from "@/lib/use-tx";
 import { recordSessionBill } from "@/lib/session-bills";
+import { sendEncryptBill } from "./encrypt-bill";
 import { useDataLayer, useDataScope } from "./provider";
 import { queryKeys } from "./keys";
 import type { BillDraft } from "./types";
@@ -141,6 +143,51 @@ export function useAddBill(datasetId: string): TxController<{ draft: BillDraft; 
           queryClient.invalidateQueries({ queryKey: queryKeys.dataset(scope, datasetId) }),
           queryClient.invalidateQueries({ queryKey: queryKeys.myDatasets(scope) }),
           queryClient.invalidateQueries({ queryKey: queryKeys.chainView(scope, datasetId) }),
+          queryClient.invalidateQueries({ queryKey: queryKeys.sellerStats(scope) }),
+        ]);
+      },
+    },
+  );
+}
+
+/**
+ * One Encrypt on the Upload page: create the dataset on the first press (datasetId null), then add the bill.
+ * One useTx, so one TxStatus covers both wallet prompts. The created id is reported through onDatasetCreated
+ * before the bill is sent, so a retry after a failed addBill skips the create. Only amountCents, dateDays and
+ * category reach the DataLayer; the full draft, vendor included, goes to tab memory (session-bills) on confirm.
+ */
+export function useEncryptBill(
+  datasetId: string | null,
+  opts: { name: string; onDatasetCreated: (id: string) => void },
+): TxController<{ draft: BillDraft; index: number }> {
+  const layer = useDataLayer();
+  const scope = useDataScope();
+  const queryClient = useQueryClient();
+  // The id created by this hook, so a retry or the confirm handler has it before the parent re-renders.
+  const createdRef = useRef<string | null>(null);
+  return useTx(
+    ({ draft }: { draft: BillDraft; index: number }) =>
+      sendEncryptBill(
+        layer,
+        {
+          datasetId: datasetId ?? createdRef.current,
+          name: opts.name,
+          fields: { amountCents: draft.amountCents, dateDays: draft.dateDays, category: draft.category },
+        },
+        (id) => {
+          createdRef.current = id;
+          opts.onDatasetCreated(id);
+        },
+      ),
+    {
+      onConfirmed: async (_receipt, { draft, index }) => {
+        const id = datasetId ?? createdRef.current;
+        if (!id) return;
+        if (scope.address) recordSessionBill(scope.address, id, { index, draft });
+        await Promise.all([
+          queryClient.invalidateQueries({ queryKey: queryKeys.dataset(scope, id) }),
+          queryClient.invalidateQueries({ queryKey: queryKeys.myDatasets(scope) }),
+          queryClient.invalidateQueries({ queryKey: queryKeys.chainView(scope, id) }),
           queryClient.invalidateQueries({ queryKey: queryKeys.sellerStats(scope) }),
         ]);
       },
