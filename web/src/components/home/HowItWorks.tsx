@@ -1,15 +1,16 @@
 import { Card } from "@/components/ui/Card";
 
 const STEPS = [
-  { title: "Upload", line: "Add a bill photo. It stays in your browser." },
-  { title: "OCR", line: "Text is read on your device. Nothing goes to a server." },
-  { title: "Encrypt", line: "Amount, category and date are encrypted before they leave." },
-  { title: "Compute", line: "The contract adds up encrypted totals without decrypting." },
-  { title: "List", line: "Seal the dataset and set a price in test ETH." },
-  { title: "Buy", line: "Buyers pay once and get access to the aggregates only." },
+  { title: "Read", line: "Upload a bill photo. The text is read on your device, never on a server." },
+  { title: "Encrypt", line: "Amount, category and date are encrypted before they leave your browser." },
+  { title: "Compute", line: "The contract adds up encrypted totals without ever decrypting them." },
+  { title: "List", line: "Set a price in test ETH and list the sealed dataset on the Marketplace." },
+  { title: "Buy", line: "A buyer pays once. The payment is held until you withdraw it." },
+  { title: "Access", line: "The contract grants the buyer's wallet access to the totals, not to bills." },
 ];
 
-export function FlowSteps() {
+// The only `ol` on Home: six glow cards, 6 columns from 1024px, 3 from 768px, 1 below.
+export function HowItWorks() {
   return (
     <section className="bg-bg">
       <div className="mx-auto w-full max-w-6xl px-4 py-16 sm:px-6">

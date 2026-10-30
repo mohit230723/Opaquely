@@ -1,6 +1,6 @@
 import { Hero } from "@/components/Hero";
 import { EmbossedWordmark } from "@/components/home/EmbossedWordmark";
-import { FlowSteps } from "@/components/FlowSteps";
+import { HowItWorks } from "@/components/home/HowItWorks";
 import { PrivacySection } from "@/components/home/PrivacySection";
 import { TechSection } from "@/components/home/TechSection";
 import { ClosingCta } from "@/components/home/ClosingCta";
@@ -10,7 +10,7 @@ export default function LandingPage() {
     <>
       <Hero />
       <EmbossedWordmark />
-      <FlowSteps />
+      <HowItWorks />
       <PrivacySection />
       <TechSection />
       <ClosingCta />

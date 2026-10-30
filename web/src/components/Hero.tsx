@@ -38,10 +38,10 @@ export function Hero() {
             bill.
           </p>
           <div className="mt-6 flex flex-wrap items-center gap-4">
-            <Button variant="primary" href="/upload">
+            <Button variant="primary" href="/upload" size="lg">
               Upload
             </Button>
-            <Button variant="secondary" href="/marketplace">
+            <Button variant="secondary" href="/marketplace" size="lg">
               Browse marketplace
             </Button>
             {isConnected ? null : <ConnectButton showBalance={false} />}

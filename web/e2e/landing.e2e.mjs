@@ -1,12 +1,12 @@
 // Landing: the hero (size, live WebGL2 context), the CTAs, the "How it works" explainer and the footer.
 
 const STEPS = [
-  ["Upload", "Add a bill photo. It stays in your browser."],
-  ["OCR", "Text is read on your device. Nothing goes to a server."],
-  ["Encrypt", "Amount, category and date are encrypted before they leave."],
-  ["Compute", "The contract adds up encrypted totals without decrypting."],
-  ["List", "Seal the dataset and set a price in test ETH."],
-  ["Buy", "Buyers pay once and get access to the aggregates only."],
+  ["Read", "Upload a bill photo. The text is read on your device, never on a server."],
+  ["Encrypt", "Amount, category and date are encrypted before they leave your browser."],
+  ["Compute", "The contract adds up encrypted totals without ever decrypting them."],
+  ["List", "Set a price in test ETH and list the sealed dataset on the Marketplace."],
+  ["Buy", "A buyer pays once. The payment is held until you withdraw it."],
+  ["Access", "The contract grants the buyer's wallet access to the totals, not to bills."],
 ];
 
 export default async function landing({ baseUrl, accounts, assert, waitForWallet, newPage }) {
