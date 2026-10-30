@@ -43,10 +43,10 @@ beforeEach(() => {
 });
 
 describe("PurchasePanel access states", () => {
-  it("shows the Buy button when access is false", () => {
+  it("shows the Buy this dataset button when access is false", () => {
     mocks.access.data = false;
     const html = render();
-    expect(html).toContain("Buy dataset");
+    expect(html).toContain("Buy this dataset");
     expect(html).not.toContain("Access granted");
   });
 
@@ -75,7 +75,7 @@ describe("PurchasePanel access states", () => {
     mocks.access.isError = true;
     mocks.access.data = false;
     const html = render();
-    expect(html).toContain("Buy dataset");
+    expect(html).toContain("Buy this dataset");
     expect(html).not.toContain("Could not check your access.");
   });
 });

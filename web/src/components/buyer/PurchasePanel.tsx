@@ -1,28 +1,23 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import { useAccount } from "wagmi";
 import { Skeleton } from "@/components/Skeleton";
-import { TxStatus } from "@/components/TxStatus";
 import { CheckIcon } from "@/components/icons";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
-import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { StatusChip } from "@/components/ui/StatusChip";
-import { useBuyListing, useHasAccess } from "@/data/hooks";
+import { BuyDialog, panelKey } from "@/components/marketplace/BuyDialog";
+import { useHasAccess } from "@/data/hooks";
 import type { Listing } from "@/data/types";
 import { BUYER_CAN_DECRYPT, DECRYPT_COMING_LABEL, DECRYPT_HELPER } from "@/lib/copy";
-import { formatEth, shortAddress } from "@/lib/format";
-import { isBusy } from "@/lib/tx-machine";
+import { formatEth } from "@/lib/format";
 
-/** Identity of one panel: a wallet looking at one listing. */
-export function panelKey(address: string | undefined, listingId: string): string {
-  return `${address ?? "none"}:${listingId}`;
-}
+// The panel identity lives with the shared dialog; re-exported for the detail page and its tests.
+export { panelKey };
 
 /**
- * Price, the buy confirmation, and the own-listing and access-granted states. The inner panel is keyed by
+ * Price, the buy action (the shared BuyDialog), and the own-listing and access-granted states. The inner panel is keyed by
  * wallet and listing, so switching account remounts it: an open dialog, a "Transaction confirmed" or a
  * failure from the previous wallet cannot carry over, and "Pay" can never send from a wallet other than
  * the one that opened the dialog.
@@ -33,52 +28,19 @@ export function PurchasePanel({ listing }: { listing: Listing }) {
 }
 
 function PurchasePanelInner({ listing }: { listing: Listing }) {
-  const router = useRouter();
   const { address } = useAccount();
   const access = useHasAccess(listing.id);
-  const { state, run, reset } = useBuyListing(listing.id);
   const [open, setOpen] = useState(false);
 
   const own = address !== undefined && address.toLowerCase() === listing.seller.toLowerCase();
   const price = formatEth(listing.priceWei);
-  const busy = isBusy(state);
-  const confirmed = state.phase === "confirmed";
-  // A buy that failed (typically AlreadyPurchased from a stale tab) while the chain now says access is
-  // granted can only fail the same way again, so the dialog stops offering Pay and Try again. The reason
-  // stays readable and "Back to listing" closes it.
-  const failedButOwned = state.phase === "failed" && access.data === true;
-
-  function onBuy() {
-    reset();
-    setOpen(true);
-  }
-
-  function onConfirm() {
-    if (busy) return;
-    // The price the buyer saw: if it changed meanwhile, the layer rejects with a readable reason.
-    // After the attempt settles, access is re-read from the chain: a stale tab whose buy failed with
-    // AlreadyPurchased shows "Access granted" at once instead of after the next poll. On success
-    // useBuyListing has already invalidated hasAccess, so the extra read is harmless. Access is only ever
-    // read from hasAccess, never set from the tx result.
-    void run(listing.priceWei).then(() => access.refetch());
-  }
-
-  function closeDialog() {
-    setOpen(false);
-    if (!confirmed) reset();
-  }
-
-  function viewPurchases() {
-    setOpen(false);
-    router.push("/my-datasets");
-  }
 
   let action;
   if (own) {
     action = (
       <>
         <Button disabled className="w-full">
-          Buy dataset
+          Buy this dataset
         </Button>
         <p className="mt-3 text-sm text-muted">This is your listing. You cannot buy it.</p>
       </>
@@ -112,8 +74,8 @@ function PurchasePanelInner({ listing }: { listing: Listing }) {
     );
   } else {
     action = (
-      <Button className="w-full" onClick={onBuy}>
-        Buy dataset
+      <Button className="w-full" onClick={() => setOpen(true)}>
+        Buy this dataset
       </Button>
     );
   }
@@ -124,26 +86,13 @@ function PurchasePanelInner({ listing }: { listing: Listing }) {
       <p className="mt-1 text-sm text-muted">One-time payment. Permanent access.</p>
       <div className="mt-6">{action}</div>
 
-      <ConfirmDialog
+      <BuyDialog
+        listing={listing}
         open={open}
-        title="Confirm purchase"
-        confirmLabel={`Pay ${price}`}
-        dismissLabel={confirmed ? "View my datasets" : "Back to listing"}
-        hideConfirm={confirmed || failedButOwned}
-        busy={busy}
-        onConfirm={onConfirm}
-        onDismiss={confirmed ? viewPurchases : closeDialog}
-        footer={<TxStatus state={state} onRetry={failedButOwned ? undefined : onConfirm} />}
-      >
-        {confirmed ? (
-          <p>Access granted.</p>
-        ) : (
-          <p className="wrap-break-word">
-            You are paying {price} to {shortAddress(listing.seller)} for permanent access to encrypted aggregate
-            insights, not raw bills. This cannot be refunded or revoked.
-          </p>
-        )}
-      </ConfirmDialog>
+        owned={access.data}
+        onClose={() => setOpen(false)}
+        onSettled={() => void access.refetch()}
+      />
     </Card>
   );
 }

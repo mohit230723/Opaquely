@@ -14,6 +14,8 @@ export interface ConfirmDialogProps {
   dismissLabel: string;
   onConfirm: () => void;
   onDismiss: () => void;
+  /** Esc. Defaults to onDismiss; set it when the dismiss button does more than close (for example navigates). */
+  onEscape?: () => void;
   /** While busy, dismiss and Esc are blocked and the confirm button shows a spinner. */
   busy?: boolean;
   /** Slot under the body for the transaction status and the success action. */
@@ -31,6 +33,7 @@ export function ConfirmDialog({
   dismissLabel,
   onConfirm,
   onDismiss,
+  onEscape,
   busy = false,
   footer,
   hideConfirm = false,
@@ -60,7 +63,7 @@ export function ConfirmDialog({
       onCancel={(e) => {
         // Esc. Blocked while a transaction is in flight.
         e.preventDefault();
-        if (!busy) onDismiss();
+        if (!busy) (onEscape ?? onDismiss)();
       }}
       className="m-auto w-[calc(100%-2rem)] max-w-120 rounded-xl border border-border bg-surface p-6 text-text backdrop:bg-black/70"
     >
