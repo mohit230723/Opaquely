@@ -1,6 +1,6 @@
 // Opt-in proof of the stale-deployment banner (DeploymentGuard). It runs only when named:
 // `node scripts/demo-rehearse.mjs --stale` names it on a node that was restarted WITHOUT a deploy.
-// It fails by design on a deployed node. Both chain-mode pages must show the non-dismissible alert and the
+// It fails by design on a deployed node. Both chain-mode pages (/marketplace and /upload) must show the non-dismissible alert and the
 // page below it must be inert.
 import fs from "node:fs";
 import path from "node:path";
@@ -33,15 +33,18 @@ export default async function staleDeployment({ baseUrl, accounts, assert, waitF
     );
   }
 
-  for (const [route, who, role] of [
-    ["/buy", accounts.buyer, "buyer"],
-    ["/sell", accounts.seller, "seller"],
+  // No role pairing: any wallet can open either page (Phase 7 D-01).
+  for (const [route, who] of [
+    ["/marketplace", accounts.buyer],
+    ["/upload", accounts.seller],
   ]) {
-    const page = await newPage({ account: who, roles: { [who]: role }, rpcUrl: RPC, data: "chain" });
+    const page = await newPage({ account: who, rpcUrl: RPC, data: "chain" });
     await page.goto(baseUrl + route);
     await waitForWallet(page, who);
     await page.getByRole("alert").filter({ hasText: STALE_TEXT }).waitFor(T);
     const guarded = page.locator('[data-testid="deployment-guarded"]');
+    await page.locator('[data-testid="deployment-guarded"][data-status="missing"]').waitFor({ state: "attached", ...T });
+    assert((await guarded.getAttribute("data-status")) === "missing", `${route}: the guard must report data-status="missing"`);
     assert((await guarded.getAttribute("inert")) !== null, `${route}: the page below the banner must be inert`);
   }
 

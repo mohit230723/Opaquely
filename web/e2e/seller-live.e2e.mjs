@@ -1,10 +1,11 @@
-// Phase 4 proof (tracer): the seller pipeline against a REAL hardhat node with the contracts deployed
-// (node contracts/scripts/dev-node.mjs start; npm --prefix contracts run deploy).
-// Create dataset -> under-filled listing is blocked -> two bills read by browser OCR from the bundled
-// sample photos and one typed by hand, each encrypted in the browser and added in one wallet-signed tx
-// -> chain-vs-you panel -> list -> sealed. Then assert on chain with viem and an SDK decrypt, and audit
-// everything that left the page (image bytes, OCR-only text, vendors, amount text, POST targets, CDN
-// attempts, storage, IndexedDB).
+// Phase 4 proof (tracer), on the Phase 7 Upload page: the seller pipeline against a REAL hardhat node with the
+// contracts deployed (node contracts/scripts/dev-node.mjs start; npm --prefix contracts run deploy).
+// /upload: describe -> List to Marketplace is blocked under the minimum -> two bills read by browser OCR from the
+// bundled sample photos and one typed by hand, each encrypted in the browser with Encrypt (the first Encrypt
+// creates the dataset; its id is read from the chain) -> the chain rows under Encrypted bills -> List to
+// Marketplace -> sealed, and My Datasets shows it Listed. Then assert on chain with viem and an SDK decrypt, and
+// audit everything that left the page (image bytes, OCR-only text, vendors, amount text, POST targets, CDN
+// attempts, storage, IndexedDB). No role anywhere; every lookup is scoped to header, main or a dialog.
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -46,7 +47,7 @@ export default async function sellerLive({ baseUrl, accounts, assert, waitForWal
   }).then((r) => r.ok, () => false);
   if (!up) throw new Error("no hardhat node on " + RPC);
 
-  const page = await newPage({ account: accounts.seller, roles: { [accounts.seller]: "seller" }, rpcUrl: RPC, data: "chain" });
+  const page = await newPage({ account: accounts.seller, rpcUrl: RPC, data: "chain" });
   const outgoing = []; // every request body and URL that left the page, to scan for plaintext
   const posts = []; // every POST target
   const rpcMethods = new Set();
@@ -65,121 +66,137 @@ export default async function sellerLive({ baseUrl, accounts, assert, waitForWal
   });
   page.on("console", (m) => consoleLines.push(m.text()));
 
-  // ---- create a dataset on chain ----
-  await page.goto(baseUrl + "/sell/datasets/new");
-  await waitForWallet(page, accounts.seller);
-  await page.getByLabel("Dataset name").fill("October household bills");
-  await page.getByRole("button", { name: "Create dataset" }).click();
-  await page.getByText("Dataset created.").waitFor(T);
-  await page.getByRole("link", { name: "Add your first bill" }).click();
-  await page.getByRole("heading", { name: "Add a bill" }).waitFor(T);
-  const datasetId = new URL(page.url()).pathname.split("/")[3];
-  assert(/^\d+$/.test(datasetId), "dataset id from the chain log must be numeric, got " + datasetId);
+  const tag = Date.now().toString(36);
+  // The dataset name is also the listing title (Upload has no separate title field).
+  const NAME = "October household " + tag;
+  const reg = deployments.DatasetRegistry;
+  const mkt = deployments.Marketplace;
+  const pc = createPublicClient({ chain: viemHardhat, transport: http(RPC) });
+  const seller = getAddress(accounts.seller);
+  const main = page.locator("main");
+  const primary = page.locator("header").getByRole("navigation", { name: "Primary" });
+  const encryptedBills = main.locator("section", { has: page.getByRole("heading", { level: 2, name: "Encrypted bills" }) });
+  const listButton = main.getByRole("button", { name: "List to Marketplace", exact: true });
 
-  // ---- MKT-01: an empty dataset cannot be listed. A hard navigation is safe: the tab holds no bill yet. ----
-  await page.goto(baseUrl + "/sell/datasets/" + datasetId + "/list");
+  // ---- describe a new dataset on /upload (no role step: any wallet can upload) ----
+  await page.goto(baseUrl + "/upload");
   await waitForWallet(page, accounts.seller);
-  await page.getByText("Add at least 3 bills before listing. This dataset has 0.").waitFor(T);
-  assert(
-    (await page.getByRole("button", { name: "List dataset", exact: true }).count()) === 0,
-    "no List dataset action under the minimum",
+  await main.getByRole("heading", { level: 2, name: "Describe your dataset" }).waitFor(T);
+  // The first Encrypt creates the dataset, so its id is the one id datasetsByOwner gains (never from the URL).
+  const idsBefore = new Set(
+    (await pc.readContract({ address: reg.address, abi: reg.abi, functionName: "datasetsByOwner", args: [seller] })).map((r) =>
+      r.id.toString(),
+    ),
   );
-  await page.goto(baseUrl + "/sell/datasets/" + datasetId + "/add");
-  await waitForWallet(page, accounts.seller);
-  await page.getByRole("heading", { name: "Add a bill" }).waitFor(T);
+  await main.getByLabel("Dataset name").fill(NAME);
+  await main.getByLabel("Description").fill("Three household bills from October 2026.");
   // The banner is honest about the local mock: the node sees amount, date and category in cleartext.
-  await page.getByText("Local FHEVM mock: the image and the vendor stay in this browser").waitFor(T);
+  await main.getByText("Local FHEVM mock: the image and the vendor stay in this browser").waitFor(T);
 
-  async function addCurrentBill(expectCount) {
-    await page.getByRole("button", { name: "Add bill to dataset" }).click();
-    await page.getByText("Transaction confirmed").waitFor(T);
-    await page.getByText(`Bill added. This dataset now has ${expectCount} bill`).waitFor(T);
+  // ---- MKT-01: a dataset under the minimum cannot be listed (the price is editable, the button is blocked) ----
+  assert((await listButton.getAttribute("aria-disabled")) === "true", "List to Marketplace must be blocked before any bill");
+  await main.getByText("Add at least 3 bills before listing. This dataset has 0.").waitFor(T);
+
+  async function encryptCurrentBill(expectCount) {
+    await main.getByRole("button", { name: "Encrypt", exact: true }).click();
+    // The first Encrypt signs twice (create the dataset, then record the bill).
+    await main.getByText(`Bill encrypted. This dataset has ${expectCount} bill`).waitFor({ timeout: expectCount === 1 ? 60_000 : 30_000 });
+    await main.getByText("Transaction confirmed").waitFor(T);
   }
 
   // ---- bill 1: OCR from the Grocery sample (SELL-02, SELL-03) ----
-  await page.getByRole("button", { name: "Grocery" }).click();
-  await page.getByTestId("ocr-status").filter({ hasText: "Read the bill" }).waitFor({ timeout: 30_000 });
-  assert((await page.getByLabel("Vendor (optional)").inputValue()) === "SHREE GANESH SUPER MART", "grocery vendor prefill");
-  assert((await page.getByLabel("Total amount").inputValue()) === "1507.80", "grocery amount prefill");
-  assert((await page.getByLabel("Date").inputValue()) === "2026-10-18", "grocery date prefill");
+  await main.getByRole("button", { name: "Grocery", exact: true }).click();
+  await main.getByTestId("ocr-status").filter({ hasText: "Read the bill" }).waitFor({ timeout: 30_000 });
+  assert((await main.getByLabel("Vendor (optional)").inputValue()) === "SHREE GANESH SUPER MART", "grocery vendor prefill");
+  assert((await main.getByLabel("Total amount").inputValue()) === "1507.80", "grocery amount prefill");
+  assert((await main.getByLabel("Date").inputValue()) === "2026-10-18", "grocery date prefill");
   assert(
-    (await page.getByRole("radio", { name: "Groceries/Food" }).getAttribute("aria-checked")) === "true",
+    (await main.getByRole("radio", { name: "Groceries/Food" }).getAttribute("aria-checked")) === "true",
     "grocery category prefill",
   );
-  await addCurrentBill(1);
-  await page.getByRole("button", { name: "Add another bill" }).click();
+  await encryptCurrentBill(1);
+  const fresh = (
+    await pc.readContract({ address: reg.address, abi: reg.abi, functionName: "datasetsByOwner", args: [seller] })
+  ).filter((r) => !idsBefore.has(r.id.toString()));
+  assert(fresh.length === 1, "the first Encrypt must create exactly one dataset, got " + fresh.length);
+  const datasetId = fresh[0].id.toString();
+  assert(/^\d+$/.test(datasetId), "dataset id from the chain must be numeric, got " + datasetId);
+  await main.getByRole("button", { name: "Add another bill" }).click();
 
   // ---- bill 2: OCR from the Electricity sample ----
-  await page.getByRole("button", { name: "Electricity" }).click();
-  await page.getByTestId("ocr-status").filter({ hasText: "Read the bill" }).waitFor({ timeout: 30_000 });
-  await page.waitForFunction(() => document.querySelector('input[name="amount"]')?.value === "3322.40", null, T);
+  await main.getByRole("button", { name: "Electricity", exact: true }).click();
+  await main.getByTestId("ocr-status").filter({ hasText: "Read the bill" }).waitFor({ timeout: 30_000 });
+  await page.waitForFunction(() => document.querySelector('main input[name="amount"]')?.value === "3322.40", null, T);
   assert(
-    (await page.getByLabel("Vendor (optional)").inputValue()) === "Bright Power Distribution Co. Ltd.",
+    (await main.getByLabel("Vendor (optional)").inputValue()) === "Bright Power Distribution Co. Ltd.",
     "electricity vendor prefill",
   );
-  assert((await page.getByLabel("Date").inputValue()) === "2026-10-12", "electricity date prefill");
+  assert((await main.getByLabel("Date").inputValue()) === "2026-10-12", "electricity date prefill");
   assert(
-    (await page.getByRole("radio", { name: "Utilities" }).getAttribute("aria-checked")) === "true",
+    (await main.getByRole("radio", { name: "Utilities" }).getAttribute("aria-checked")) === "true",
     "electricity category prefill",
   );
-  await addCurrentBill(2);
-  await page.getByRole("button", { name: "Add another bill" }).click();
+  await encryptCurrentBill(2);
+
+  // Still under the minimum at 2 bills: step 4 says so and List to Marketplace stays blocked.
+  await main.getByText("Add at least 3 bills before listing. This dataset has 2.").waitFor(T);
+  assert((await listButton.getAttribute("aria-disabled")) === "true", "List to Marketplace must stay blocked at 2 bills");
+  await main.getByRole("button", { name: "Add another bill" }).click();
 
   // ---- bill 3: typed by hand (OCR only pre-fills, so manual entry always works: SELL-05) ----
-  await page.getByLabel("Vendor (optional)").fill("Corner Kirana");
-  await page.getByLabel("Total amount").fill("2,500.00");
-  await page.getByLabel("Date").fill("2026-10-20");
-  await page.getByRole("radio", { name: "Shopping" }).click();
-  await addCurrentBill(3);
+  await main.getByLabel("Vendor (optional)").fill("Corner Kirana");
+  await main.getByLabel("Total amount").fill("2,500.00");
+  await main.getByLabel("Date").fill("2026-10-20");
+  await main.getByRole("radio", { name: "Shopping" }).click();
+  await encryptCurrentBill(3);
 
-  // ---- in-app navigation only from here until the listing is confirmed: a hard reload would clear the
-  // tab-memory plaintext map, and the category mask is computed from it ----
-  await page.getByRole("link", { name: "Back to dataset" }).click();
-  await page.getByRole("link", { name: "Chain view" }).click();
-  await page.getByRole("heading", { name: "Bill 3" }).waitFor(T);
-  // The panel shows what was typed this session beside the real on-chain handles.
-  const panel = await page.locator("main").innerText();
+  // ---- no reload from here until the listing is confirmed: a hard reload would clear the tab-memory plaintext
+  // map, and the category mask is computed from it. Step 3 (Encrypted bills) shows the chain rows on this page. ----
+  await encryptedBills.getByRole("heading", { level: 3, name: "Bill 3" }).waitFor(T);
+  // The rows show what was typed this session beside the real on-chain handles.
+  const panel = await encryptedBills.innerText();
   assert(
     panel.includes("SHREE GANESH SUPER MART") &&
       panel.includes("1,507.80") &&
       panel.includes("Bright Power") &&
       panel.includes("Corner Kirana"),
-    "panel must show the session values",
+    "the chain rows must show the session values",
   );
-  const handles = await page
+  assert(
+    (await encryptedBills.getByText("Not available after reload").count()) === 0,
+    "bills encrypted in this tab must show their values, not the after-reload note",
+  );
+  const handles = await encryptedBills
     .locator('[title^="0x"]')
     .evaluateAll((els) => els.map((e) => e.getAttribute("title") ?? "").filter((t) => /^0x[0-9a-f]{64}$/i.test(t)));
   assert(handles.length === 9, "expected 9 ciphertext handles, got " + handles.length);
-  await page.goBack();
 
-  // ---- list ----
-  await page.getByRole("link", { name: "List dataset" }).click();
-  await page.getByLabel("Title").fill("October household insights");
-  await page.getByLabel("Description").fill("Three household bills from October 2026.");
-  await page.getByLabel("Price (ETH)").fill("0.05");
-  await page.getByRole("button", { name: "List dataset", exact: true }).click();
+  // ---- list with List to Marketplace ----
+  assert((await listButton.getAttribute("aria-disabled")) === null, "List to Marketplace must unlock at 3 bills");
+  await main.getByLabel("Price (ETH)").fill("0.05");
+  await listButton.click();
+  const listDialog = page.getByRole("dialog");
+  await listDialog.getByRole("heading", { name: `List "${NAME}"?` }).waitFor(T);
   // The tab holds all three bills, so the dialog names the categories buyers will see (WR-06).
-  await page.getByText("Buyers will see these categories: Utilities, Groceries/Food, Shopping.").waitFor(T);
-  await page.getByRole("button", { name: "Seal and list dataset" }).click();
-  await page.getByText("Transaction confirmed").waitFor(T);
+  await listDialog.getByText("Buyers will see these categories: Utilities, Groceries/Food, Shopping.").waitFor(T);
+  await listDialog.getByRole("button", { name: "List to Marketplace", exact: true }).click();
+  await listDialog.getByText("Transaction confirmed").waitFor(T);
+  await listDialog.getByText("Dataset listed for 0.05 ETH.").waitFor(T);
+  await page.waitForURL((u) => u.pathname === "/marketplace", { timeout: 15_000 });
 
-  // ---- the datasets list shows it listed, and a sealed dataset takes no more bills ----
-  await page.getByRole("button", { name: "View my datasets" }).click();
-  await page.waitForURL((u) => u.pathname === "/sell/datasets", { timeout: 15_000 });
-  const row = page.locator("tr", { hasText: "October household bills" });
-  await row.getByText("Listed").waitFor(T);
-  const rowText = await row.innerText();
-  assert(rowText.includes("Listed") && /\b3\b/.test(rowText), "datasets row must show Listed and 3 bills: " + rowText);
-  assert((await row.getByRole("link", { name: "Add bill" }).count()) === 0, "a listed dataset must not offer Add bill");
-  await page.goto(baseUrl + "/sell/datasets/" + datasetId + "/add");
+  // ---- My Datasets shows it listed with 3 bills and no Continue in Upload; a sealed dataset takes no more bills ----
+  await primary.getByRole("link", { name: "My Datasets", exact: true }).click({ timeout: 25_000 });
+  await page.waitForURL((u) => u.pathname === "/my-datasets", { timeout: 15_000 });
+  const card = main.getByTestId("listed-dataset").filter({ has: page.getByRole("heading", { level: 3, name: NAME, exact: true }) });
+  await card.getByText("Listed", { exact: true }).waitFor(T);
+  const cardText = await card.innerText();
+  assert(cardText.includes("Listed") && cardText.includes("3 bills"), "the dataset card must show Listed and 3 bills: " + cardText);
+  assert((await card.getByRole("link", { name: "Continue in Upload" }).count()) === 0, "a listed dataset must not offer Continue in Upload");
+  await page.goto(baseUrl + "/upload?dataset=" + datasetId);
   await waitForWallet(page, accounts.seller);
-  await page.getByRole("heading", { name: "This dataset is sealed" }).waitFor(T);
+  await main.getByRole("heading", { name: "Dataset not found" }).waitFor(T);
 
   // ---- chain assertions (Node, viem) ----
-  const reg = deployments.DatasetRegistry;
-  const mkt = deployments.Marketplace;
-  const pc = createPublicClient({ chain: viemHardhat, transport: http(RPC) });
-  const seller = getAddress(accounts.seller);
   const rows = await pc.readContract({ address: reg.address, abi: reg.abi, functionName: "datasetsByOwner", args: [seller] });
   const mine = rows.find((r) => r.id.toString() === datasetId);
   assert(
@@ -189,7 +206,7 @@ export default async function sellerLive({ baseUrl, accounts, assert, waitForWal
   const listingId = await pc.readContract({ address: mkt.address, abi: mkt.abi, functionName: "listingOfDataset", args: [BigInt(datasetId)] });
   assert(listingId > 0n, "dataset must be listed");
   const listing = await pc.readContract({ address: mkt.address, abi: mkt.abi, functionName: "getListing", args: [listingId] });
-  assert(listing.priceWei === 50_000_000_000_000_000n && listing.title === "October household insights", "listing fields");
+  assert(listing.priceWei === 50_000_000_000_000_000n && listing.title === NAME, "listing fields");
   // groceries (1), utilities (0) and shopping (4) were typed in this tab: bits 0, 1 and 4
   assert(listing.categoryMask === 0b010011, "declared category mask, got " + listing.categoryMask);
 
@@ -230,9 +247,11 @@ export default async function sellerLive({ baseUrl, accounts, assert, waitForWal
   assert(tess.some((u) => /-lstm\.wasm\.js$/.test(u)), "an lstm core must load from /tesseract");
   assert(tess.some((u) => u.endsWith("/tesseract/lang/eng.traineddata.gz")), "eng model must load from /tesseract/lang");
   assert(!outgoing.some((o) => /jsdelivr|unpkg|cdn\./.test(o.split(" ")[0])), "no CDN request may be attempted");
+  // Phase 7 removed the role: the app keeps no storage key of its own, only the wallet libraries do.
   const keys = await page.evaluate(() => [...Object.keys(localStorage), ...Object.keys(sessionStorage)]);
+  assert(!keys.some((k) => /^opaquely/i.test(k)), "the app must keep no opaquely* storage key: " + keys.join(","));
   assert(
-    keys.every((k) => k.startsWith("opaquely:role:") || /^(wagmi|rk-|@appkit|base-acc-sdk|WALLETCONNECT|wc@)/i.test(k)),
+    keys.every((k) => /^(wagmi|rk-|@appkit|base-acc-sdk|WALLETCONNECT|wc@)/i.test(k)),
     "unexpected storage keys: " + keys.join(","),
   );
   const dbs = await page.evaluate(async () => (await indexedDB.databases()).map((d) => d.name));

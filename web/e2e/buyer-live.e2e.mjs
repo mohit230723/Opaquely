@@ -1,10 +1,12 @@
 // Phase 5 proof against a REAL hardhat node with the contracts deployed
 // (node contracts/scripts/dev-node.mjs start; npm --prefix contracts run deploy).
-// A Node helper seeds two listings the way a seller would, then five browser contexts take part: the buyer,
-// a stale tab of the same buyer, the outsider (Hardhat #2), the seller with a buyer role, and the seller on
-// the dashboard (left open to prove polling). The rejections that cannot be clicked (a wrong amount, a buy of
-// your own listing) are proven at layer level in src/data/live/live.integration.test.ts; here the browser
-// shows the own-listing state and proves the double buy with the stale tab.
+// Phase 7 pages, no role anywhere. A Node helper seeds two listings the way a seller would, then five browser
+// contexts take part: the buyer (on /marketplace, /marketplace/{id} and /my-datasets), a stale tab of the same
+// buyer, the outsider (Hardhat #2), the seller browsing the Marketplace (its own listing shows Your listing), and
+// the seller on My Account (/account, left open to prove polling, then Withdraw and the Transactions order).
+// The rejections that cannot be clicked (a wrong amount, a buy of your own listing) are proven at layer level in
+// src/data/live/live.integration.test.ts; here the browser shows the own-listing state and proves the double buy
+// with the stale tab. Every lookup is scoped to header, main, a dialog or a card: the footer repeats nav names.
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -92,111 +94,115 @@ export default async function buyerLive({ baseUrl, accounts, assert, waitForWall
   const idA = String(seedA.listingId);
   const idB = String(seedB.listingId);
 
-  // ---- (b) seller dashboard D, opened before the buy and left open ----
-  const D = track(await newPage({ account: accounts.seller, roles: { [accounts.seller]: "seller" }, rpcUrl: RPC, data: "chain" }));
-  await D.goto(baseUrl + "/sell");
+  // ---- (b) seller's My Account D, opened before the buy and left open (no role: the seller is just a wallet) ----
+  const D = track(await newPage({ account: accounts.seller, rpcUrl: RPC, data: "chain" }));
+  await D.goto(baseUrl + "/account");
   await waitForWallet(D, accounts.seller);
-  await D.getByText("Withdrawable balance", { exact: true }).waitFor(T);
+  await D.locator("main").getByText("Withdrawable balance", { exact: true }).waitFor(T);
   const statsOpen = await read("sellerStats", [seller]);
   assert(statsOpen[0] - statsBefore[0] === 2n, `the seller must have gained exactly 2 listings, got ${statsOpen[0] - statsBefore[0]}`);
   await statWait(D, "Purchases of your listings", String(statsOpen[1]));
   await statWait(D, "Datasets for sale", String(statsOpen[0]));
 
-  // ---- (c) buyer A browses and filters (MKT-03) ----
-  const A = track(
-    await newPage({
-      account: accounts.buyer,
-      roles: { [accounts.buyer]: "buyer", [accounts.outsider]: "buyer" },
-      rpcUrl: RPC,
-      data: "chain",
-    }),
-  );
-  await A.goto(baseUrl + "/buy");
+  // ---- (c) buyer A browses and filters on /marketplace (MKT-03) ----
+  const A = track(await newPage({ account: accounts.buyer, rpcUrl: RPC, data: "chain" }));
+  await A.goto(baseUrl + "/marketplace");
   await waitForWallet(A, accounts.buyer);
-  const cardA = A.getByRole("link", { name: titleA });
-  const cardB = A.getByRole("link", { name: titleB });
+  const aMain = A.locator("main");
+  const cardOf = (page, title) =>
+    page
+      .locator("main")
+      .locator('li[data-testid="listing-card"]')
+      .filter({ has: page.getByRole("link", { name: title, exact: true }) });
+  const cardA = cardOf(A, titleA);
+  const cardB = cardOf(A, titleB);
   await cardA.waitFor(T);
   const textA = await cardA.innerText();
   for (const s of ["0xf39F…2266", "0.05 ETH", "3 bills", "Utilities", "Groceries/Food", "Shopping"]) {
     assert(textA.includes(s), `listing A card must show "${s}", got: ${textA}`);
   }
   assert(!textA.includes("Categories not declared by the seller"), "listing A declared its categories");
+  assert((await cardA.getByRole("button", { name: "Buy this dataset" }).count()) === 1, "listing A card must offer Buy this dataset");
   await cardB.waitFor(T);
   const textB = await cardB.innerText();
   assert(textB.includes("Categories not declared by the seller"), "listing B card must say categories are not declared");
   assert(textB.includes("0.02 ETH"), "listing B card must show 0.02 ETH, got: " + textB);
-  await noMarkers(A, "/buy");
+  await noMarkers(A, "/marketplace");
 
-  await A.getByLabel("Search").fill(tag);
+  await aMain.getByLabel("Search").fill(tag);
   await cardA.waitFor(T);
   await cardB.waitFor(T);
-  await A.getByRole("checkbox", { name: "Groceries/Food" }).check();
+  await aMain.getByRole("checkbox", { name: "Groceries/Food" }).check();
   await cardA.waitFor(T);
   await cardB.waitFor({ state: "detached", ...T });
-  await A.getByRole("checkbox", { name: "Groceries/Food" }).uncheck();
+  await aMain.getByRole("checkbox", { name: "Groceries/Food" }).uncheck();
   await cardB.waitFor(T);
-  await A.getByRole("checkbox", { name: "Medical" }).check();
+  await aMain.getByRole("checkbox", { name: "Medical" }).check();
   await cardA.waitFor({ state: "detached", ...T });
-  await A.getByRole("checkbox", { name: "Medical" }).uncheck();
+  await aMain.getByRole("checkbox", { name: "Medical" }).uncheck();
   await cardA.waitFor(T);
-  await A.getByLabel("Min price (ETH)").fill("0.03");
+  await aMain.getByLabel("Min price (ETH)").fill("0.03");
   await cardA.waitFor(T);
   await cardB.waitFor({ state: "detached", ...T });
-  await A.getByLabel("Min price (ETH)").fill("0.1");
+  await aMain.getByLabel("Min price (ETH)").fill("0.1");
   await cardA.waitFor({ state: "detached", ...T });
-  await A.getByRole("button", { name: "Clear filters" }).first().click();
+  await aMain.getByRole("button", { name: "Clear filters" }).first().click();
   await cardA.waitFor(T);
   await cardB.waitFor(T);
 
-  // ---- (d) detail page ----
-  await cardA.click();
+  // ---- (d) detail page /marketplace/{id}, reached from the card's title link ----
+  await cardA.getByRole("link", { name: titleA, exact: true }).click();
+  await A.waitForURL((u) => u.pathname === "/marketplace/" + idA, { timeout: 15_000 });
   await A.getByRole("heading", { level: 1, name: titleA }).waitFor(T);
-  await A.getByText("One-time payment. Permanent access.").waitFor(T);
-  await A.getByText("Categories are declared by the seller and not verified.").waitFor(T);
-  const buyA = A.getByRole("button", { name: "Buy dataset" });
+  await aMain.getByText("One-time payment. Permanent access.").waitFor(T);
+  await aMain.getByText("Categories are declared by the seller and not verified.").waitFor(T);
+  const buyA = aMain.getByRole("button", { name: "Buy this dataset" });
   await buyA.waitFor(T);
-  assert((await buyA.getAttribute("aria-disabled")) !== "true", "Buy must be enabled for the buyer");
+  assert((await buyA.getAttribute("aria-disabled")) !== "true", "Buy this dataset must be enabled for the buyer");
 
   // ---- (e) stale tab B opens its purchase dialog BEFORE the first tab buys (PD-8) ----
-  const B = track(await newPage({ account: accounts.buyer, roles: { [accounts.buyer]: "buyer" }, rpcUrl: RPC, data: "chain" }));
-  await B.goto(baseUrl + "/buy/" + idA);
+  const B = track(await newPage({ account: accounts.buyer, rpcUrl: RPC, data: "chain" }));
+  await B.goto(baseUrl + "/marketplace/" + idA);
   await waitForWallet(B, accounts.buyer);
-  await B.getByRole("button", { name: "Buy dataset" }).click();
-  await B.getByText("Confirm purchase").waitFor(T);
+  await B.locator("main").getByRole("button", { name: "Buy this dataset" }).click({ timeout: 25_000 });
+  const staleDialog = B.getByRole("dialog", { name: "Confirm purchase" });
+  await staleDialog.waitFor(T);
 
   // ---- (f) the first tab pays the exact price (MKT-06) ----
   await A.bringToFront();
   const statsPreBuy = await read("sellerStats", [seller]);
   await buyA.click();
-  const dialog = A.getByRole("dialog");
-  await dialog.getByText("Confirm purchase").waitFor(T);
+  const dialog = A.getByRole("dialog", { name: "Confirm purchase" });
+  await dialog.waitFor(T);
   const dialogText = await dialog.innerText();
   assert(dialogText.includes("You are paying 0.05 ETH to 0xf39F…2266"), "dialog must name the price and the seller, got: " + dialogText);
   await dialog.getByRole("button", { name: "Pay 0.05 ETH" }).click();
-  await A.getByText("Transaction confirmed").waitFor(T);
-  await A.getByText("Access granted.", { exact: true }).waitFor(T);
+  await dialog.getByText("Transaction confirmed").waitFor(T);
+  await dialog.getByText("Access granted.", { exact: true }).waitFor(T);
   await dialog.getByText("Awaiting signature", { exact: true }).waitFor(T);
   await dialog.getByText("Pending", { exact: true }).waitFor(T);
   const logsA = await purchasedFor(idA, accounts.buyer);
   assert(logsA.length === 1, "exactly one Purchased event for the buyer and listing A, got " + logsA.length);
   const hashA = logsA[0].transactionHash;
-  await dialog.getByRole("button", { name: "View my purchases" }).click();
-  await A.waitForURL((u) => u.pathname === "/buy/purchases", { timeout: 15_000 });
+  await dialog.getByRole("button", { name: "View my datasets" }).click();
+  await A.waitForURL((u) => u.pathname === "/my-datasets", { timeout: 15_000 });
 
-  // ---- (g) purchases (DASH-02) ----
-  const row = A.locator("li", { hasText: titleA });
-  await row.first().waitFor(T);
-  const rowText = await row.first().innerText();
-  assert(rowText.includes("Paid 0.05 ETH"), "purchase row must show Paid 0.05 ETH, got: " + rowText);
-  assert(rowText.includes(CAN_DECRYPT), "purchase row must show what the buyer can decrypt, got: " + rowText);
-  assert((await exactCount(row.first(), "Access granted")) === 1, "purchase row must show Access granted");
-  const decryptA = row.first().getByRole("button", { name: "Decrypt insights (coming in M2)" });
-  assert((await decryptA.getAttribute("aria-disabled")) === "true", "the decrypt button must be disabled");
-  const hashTitle = await row.first().locator('[title^="0x"]').first().getAttribute("title");
+  // ---- (g) the purchase under Bought by me on My Datasets (DASH-02) ----
+  const boughtA = aMain.getByTestId("bought-dataset").filter({ has: A.getByRole("link", { name: titleA, exact: true }) });
+  await boughtA.waitFor(T);
+  const boughtText = await boughtA.innerText();
+  assert(boughtText.includes("Paid 0.05 ETH"), "the bought card must show Paid 0.05 ETH, got: " + boughtText);
+  assert((await exactCount(boughtA, "Access granted")) === 1, "the bought card must show Access granted");
+  const analytics = boughtA.getByRole("button", { name: "View Analytics" });
+  assert((await analytics.getAttribute("aria-disabled")) === "true", "View Analytics must be disabled until Milestone 2");
+  await boughtA.getByText("Coming in Milestone 2.").waitFor(T);
+  // The card's titles hold the seller address and the tx hash; the hash is the 32-byte one.
+  const cardTitles = await boughtA.locator('[title^="0x"]').evaluateAll((els) => els.map((e) => e.getAttribute("title") ?? ""));
+  const hashTitle = cardTitles.find((t) => /^0x[0-9a-f]{64}$/i.test(t));
   assert(hashTitle === hashA, `purchase hash ${hashTitle} must equal the Purchased tx hash ${hashA}`);
-  await noMarkers(A, "/buy/purchases");
+  await noMarkers(A, "/my-datasets");
 
-  // ---- (h) polling: the open dashboard catches the sale without a reload (DASH-01) ----
+  // ---- (h) polling: the open My Account catches the sale without a reload (DASH-01) ----
   await D.bringToFront();
   await statWait(D, "Purchases of your listings", String(statsPreBuy[1] + 1n), 15_000);
   const statsPostBuy = await read("sellerStats", [seller]);
@@ -209,74 +215,77 @@ export default async function buyerLive({ baseUrl, accounts, assert, waitForWall
 
   // ---- (i) stale tab B pays again: refused, nothing charged twice ----
   await B.bringToFront();
-  await B.getByText("Confirm purchase").waitFor(T);
-  await B.getByRole("button", { name: "Pay 0.05 ETH" }).click();
-  await B.getByText("Transaction failed").waitFor(T);
-  await B.getByText("You already own this dataset.").first().waitFor(T);
+  await staleDialog.waitFor(T);
+  await staleDialog.getByRole("button", { name: "Pay 0.05 ETH" }).click();
+  await staleDialog.getByText("Transaction failed").waitFor(T);
+  await staleDialog.getByText("You already own this dataset.").first().waitFor(T);
   assert((await purchasedFor(idA, accounts.buyer)).length === 1, "the stale tab must not buy twice");
-  await B.getByRole("button", { name: "Back to listing" }).click();
-  await B.getByText("Access granted", { exact: true }).waitFor({ timeout: 10_000 });
+  await staleDialog.getByRole("button", { name: "Back to listing" }).click();
+  await B.locator("main").getByText("Access granted", { exact: true }).waitFor({ timeout: 10_000 });
   assert(
-    (await B.getByRole("button", { name: "Decrypt insights (coming in M2)" }).getAttribute("aria-disabled")) === "true",
+    (await B.locator("main").getByRole("button", { name: "Decrypt insights (coming in M2)" }).getAttribute("aria-disabled")) === "true",
     "the stale tab decrypt button must be disabled",
   );
 
   // ---- (j) access per wallet, switched inside one tab without a reload (MKT-08) ----
   await A.bringToFront();
-  await A.goto(baseUrl + "/buy/" + idA);
+  await A.goto(baseUrl + "/marketplace/" + idA);
   await waitForWallet(A, accounts.buyer);
-  await A.getByText("Access granted", { exact: true }).waitFor(T);
-  await A.getByText(CAN_DECRYPT).waitFor(T);
-  assert((await A.getByRole("button", { name: "Buy dataset" }).count()) === 0, "no Buy button once access is granted");
+  await aMain.getByText("Access granted", { exact: true }).waitFor(T);
+  await aMain.getByText(CAN_DECRYPT).waitFor(T);
+  assert((await aMain.getByRole("button", { name: "Buy this dataset" }).count()) === 0, "no Buy button once access is granted");
   await A.evaluate((a) => window.__opaquelyE2E.setAccount(a), accounts.outsider);
   await waitForWallet(A, accounts.outsider);
-  await A.getByRole("button", { name: "Buy dataset" }).waitFor(T);
-  assert((await exactCount(A, "Access granted")) === 0, "switching to another wallet must drop Access granted");
+  await aMain.getByRole("button", { name: "Buy this dataset" }).waitFor(T);
+  assert((await exactCount(aMain, "Access granted")) === 0, "switching to another wallet must drop Access granted");
   await A.evaluate((a) => window.__opaquelyE2E.setAccount(a), accounts.buyer);
   await waitForWallet(A, accounts.buyer);
-  await A.getByText("Access granted", { exact: true }).waitFor(T);
+  await aMain.getByText("Access granted", { exact: true }).waitFor(T);
 
   // ---- (k) outsider C: nothing ----
-  const C = track(await newPage({ account: accounts.outsider, roles: { [accounts.outsider]: "buyer" }, rpcUrl: RPC, data: "chain" }));
-  await C.goto(baseUrl + "/buy/" + idA);
+  const C = track(await newPage({ account: accounts.outsider, rpcUrl: RPC, data: "chain" }));
+  const cMain = C.locator("main");
+  await C.goto(baseUrl + "/marketplace/" + idA);
   await waitForWallet(C, accounts.outsider);
-  const buyC = C.getByRole("button", { name: "Buy dataset" });
+  const buyC = cMain.getByRole("button", { name: "Buy this dataset" });
   await buyC.waitFor(T);
-  assert((await buyC.getAttribute("aria-disabled")) !== "true", "Buy must be enabled for the outsider");
-  assert((await exactCount(C, "Access granted")) === 0, "the outsider must not see Access granted");
-  await C.goto(baseUrl + "/buy/purchases");
+  assert((await buyC.getAttribute("aria-disabled")) !== "true", "Buy this dataset must be enabled for the outsider");
+  assert((await exactCount(cMain, "Access granted")) === 0, "the outsider must not see Access granted");
+  await C.goto(baseUrl + "/my-datasets");
   await waitForWallet(C, accounts.outsider);
-  await C.getByText("No purchases yet").waitFor(T);
-  await C.goto(baseUrl + "/buy/999999");
+  await cMain.getByText("No purchases yet").waitFor(T);
+  await C.goto(baseUrl + "/marketplace/999999");
   await waitForWallet(C, accounts.outsider);
-  await C.getByText("Listing not found").first().waitFor(T);
+  await cMain.getByText("Listing not found").first().waitFor(T);
   assert((await read("hasAccess", [BigInt(idA), accounts.outsider])) === false, "chain: the outsider has no access");
 
-  // ---- (l) own listing: the seller with a buyer role cannot buy ----
-  const E = track(await newPage({ account: accounts.seller, roles: { [accounts.seller]: "buyer" }, rpcUrl: RPC, data: "chain" }));
-  await E.goto(baseUrl + "/buy");
+  // ---- (l) own listing: the seller browsing the Marketplace cannot buy its own listing ----
+  const E = track(await newPage({ account: accounts.seller, rpcUrl: RPC, data: "chain" }));
+  const eMain = E.locator("main");
+  await E.goto(baseUrl + "/marketplace");
   await waitForWallet(E, accounts.seller);
-  await E.getByRole("link", { name: titleA }).waitFor(T);
-  assert(
-    (await exactCount(E.getByRole("link", { name: titleA }), "Your listing")) === 1,
-    "the seller's own listing must carry the Your listing chip",
-  );
-  await E.goto(baseUrl + "/buy/" + idA);
+  const ownCard = cardOf(E, titleA);
+  await ownCard.waitFor(T);
+  await ownCard.getByText("Your listing", { exact: true }).waitFor(T);
+  assert((await exactCount(ownCard, "Your listing")) === 1, "the seller's own listing must carry the Your listing chip");
+  assert((await ownCard.getByRole("button", { name: "Buy this dataset" }).count()) === 0, "the seller's own card must not offer Buy");
+  await E.goto(baseUrl + "/marketplace/" + idA);
   await waitForWallet(E, accounts.seller);
-  await E.getByText("This is your listing. You cannot buy it.").waitFor(T);
+  await eMain.getByText("This is your listing. You cannot buy it.").waitFor(T);
   assert(
-    (await E.getByRole("button", { name: "Buy dataset" }).getAttribute("aria-disabled")) === "true",
-    "Buy must be disabled on the seller's own listing",
+    (await eMain.getByRole("button", { name: "Buy this dataset" }).getAttribute("aria-disabled")) === "true",
+    "Buy this dataset must be disabled on the seller's own listing",
   );
   assert((await read("hasAccess", [BigInt(idA), seller])) === false, "chain: the seller has no purchase access to its own listing");
 
-  // ---- (m) withdraw on the dashboard: balance identity (DASH-01) ----
+  // ---- (m) withdraw on My Account: balance identity (DASH-01) ----
   await D.bringToFront();
+  const dMain = D.locator("main");
   const bal0 = await client.getBalance({ address: seller });
   const blockBeforeWithdraw = await client.getBlockNumber();
-  await D.getByRole("button", { name: "Withdraw balance" }).click();
-  await D.getByText("Transaction confirmed").waitFor(T);
-  await D.getByText("Nothing to withdraw yet.").waitFor(T);
+  await dMain.getByRole("button", { name: "Withdraw balance" }).click();
+  await dMain.getByText("Transaction confirmed").waitFor(T);
+  await dMain.getByText("Nothing to withdraw yet.").waitFor(T);
   await statWait(D, "Held until withdrawn", "0 ETH");
   assert((await read("sellerStats", [seller]))[2] === 0n, "chain: nothing left to withdraw");
   // This click's withdrawal: the first Withdrawn event for the seller after the block read before the click.
@@ -293,32 +302,40 @@ export default async function buyerLive({ baseUrl, accounts, assert, waitForWall
     bal1 - bal0 + receipt.gasUsed * receipt.effectiveGasPrice === amount,
     `balance identity: delta ${bal1 - bal0} + gas ${receipt.gasUsed * receipt.effectiveGasPrice} must equal ${amount}`,
   );
-  await D.goto(baseUrl + "/sell/datasets");
-  await waitForWallet(D, accounts.seller);
-  for (const name of ["Buyer-live A " + tag, "Buyer-live B " + tag]) {
-    const tr = D.locator("tr", { hasText: name });
-    await tr.first().waitFor(T);
-    const trText = await tr.first().innerText();
-    assert(trText.includes("Listed"), `dataset ${name} must be Listed, got: ${trText}`);
-    assert((await tr.first().locator("td").nth(1).innerText()).trim() === "3", `dataset ${name} must hold 3 bills`);
-  }
 
-  // ---- (n) activity in chain order (MKT-10) ----
-  await D.goto(baseUrl + "/activity");
-  await waitForWallet(D, accounts.seller);
-  await D.locator("ol > li", { hasText: "You withdrew" }).first().waitFor(T);
-  const items = await D.locator("ol > li").allInnerTexts();
+  // ---- (n) My Account Transactions in chain order (MKT-10): this wallet's own history, newest first ----
+  const timeline = dMain.locator("ol > li");
+  await D.waitForFunction(
+    (prefix) => (document.querySelector("main ol > li")?.textContent ?? "").startsWith(prefix),
+    "You withdrew " + eth(amount),
+    T,
+  );
+  const items = await timeline.allInnerTexts();
   const iW = items.findIndex((t) => t.startsWith("You withdrew " + eth(amount)));
   const iB = items.findIndex((t) => t.startsWith("0x7099…79C8 bought") && t.includes(`"${titleA}" for 0.05 ETH`));
   const iLB = items.findIndex((t) => t.startsWith(`You listed "${titleB}" for 0.02 ETH`));
   const iLA = items.findIndex((t) => t.startsWith(`You listed "${titleA}" for 0.05 ETH`));
   // Newest first: this run's withdrawal, then its sale, then its two listings (B was listed after A).
-  assert(iW >= 0, `the withdrawal of ${eth(amount)} must be in the activity list`);
-  assert(iW < iB && iB < iLB && iLB < iLA, `activity order: withdrew ${iW}, bought ${iB}, listed B ${iLB}, listed A ${iLA}`);
-  const actHash = await D.locator("ol > li").nth(iB).locator('[title^="0x"]').first().getAttribute("title");
-  assert(actHash === hashA, `activity hash ${actHash} must equal the Purchased tx hash ${hashA}`);
+  assert(iW === 0, `the withdrawal of ${eth(amount)} must be the newest transaction, got index ${iW}`);
+  assert(iW < iB && iB < iLB && iLB < iLA, `transactions order: withdrew ${iW}, bought ${iB}, listed B ${iLB}, listed A ${iLA}`);
+  const actTitles = await timeline.nth(iB).locator('[title^="0x"]').evaluateAll((els) => els.map((e) => e.getAttribute("title") ?? ""));
+  const actHash = actTitles.find((t) => /^0x[0-9a-f]{64}$/i.test(t));
+  assert(actHash === hashA, `transaction hash ${actHash} must equal the Purchased tx hash ${hashA}`);
 
-  // ---- (o) privacy and network over every page ----
+  // ---- (o) My Datasets: A is Sold (one buyer), B is Listed, each with 3 bills ----
+  await D.locator("header").getByRole("navigation", { name: "Primary" }).getByRole("link", { name: "My Datasets", exact: true }).click({ timeout: 25_000 });
+  await D.waitForURL((u) => u.pathname === "/my-datasets", { timeout: 15_000 });
+  for (const [name, chip] of [
+    ["Buyer-live A " + tag, "Sold"],
+    ["Buyer-live B " + tag, "Listed"],
+  ]) {
+    const card = dMain.getByTestId("listed-dataset").filter({ has: D.getByRole("heading", { level: 3, name, exact: true }) });
+    await card.getByText(chip, { exact: true }).waitFor(T);
+    const cardText = await card.innerText();
+    assert(cardText.includes("3 bills"), `dataset ${name} must hold 3 bills, got: ${cardText}`);
+  }
+
+  // ---- (p) privacy and network over every page ----
   for (const url of posts) {
     assert(url.startsWith(new URL(RPC).origin) || url.startsWith(TELEMETRY), "a POST left for " + url);
   }
