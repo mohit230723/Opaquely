@@ -30,7 +30,8 @@ function DetailSkeleton() {
 function ListingDetail({ listing }: { listing: Listing }) {
   return (
     <PageShell
-      title={listing.title}
+      // Long titles wrap inside the column instead of overflowing it.
+      title={<span className="break-words">{listing.title}</span>}
       subtitle={
         <>
           Sold by{" "}
