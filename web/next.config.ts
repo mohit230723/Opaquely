@@ -8,6 +8,13 @@ const nextConfig: NextConfig = {
   async redirects() {
     return [
       { source: "/sell/datasets/new", destination: "/upload", permanent: false },
+      // The old per-dataset seller pages: add and list resume the draft on Upload; the detail and
+      // chain-view pages land on My Datasets. :id only fills the dataset query value, which Upload
+      // passes to useDataset (null unless the wallet owns it), so it can never pick the destination.
+      { source: "/sell/datasets/:id/add", destination: "/upload?dataset=:id", permanent: false },
+      { source: "/sell/datasets/:id/list", destination: "/upload?dataset=:id", permanent: false },
+      { source: "/sell/datasets/:id/chain-view", destination: "/my-datasets", permanent: false },
+      { source: "/sell/datasets/:id", destination: "/my-datasets", permanent: false },
       { source: "/sell/datasets", destination: "/my-datasets", permanent: false },
       { source: "/sell", destination: "/account", permanent: false },
       { source: "/buy/purchases", destination: "/my-datasets", permanent: false },
