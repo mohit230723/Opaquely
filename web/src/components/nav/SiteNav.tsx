@@ -58,7 +58,7 @@ export function SiteNav() {
   const current = activeIndex(usePathname());
 
   return (
-    <div className="hidden justify-self-center md:flex">
+    <div className="absolute left-1/2 top-1/2 hidden -translate-x-1/2 -translate-y-1/2 md:flex">
       <div className="flex items-center gap-1 rounded-full p-1.5" style={FRAME_STYLE}>
         <GooeyNav
           items={[...NAV]}

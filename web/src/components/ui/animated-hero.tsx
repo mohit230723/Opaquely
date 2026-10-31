@@ -26,7 +26,7 @@ function AnimatedHero() {
   return (
     <div className="flex w-full flex-col items-center justify-center gap-8">
       <div className="flex flex-col gap-4">
-        <h1 className="max-w-3xl text-center text-5xl font-normal tracking-tighter text-text md:text-7xl">
+        <h1 className="max-w-5xl text-center text-6xl font-normal tracking-tighter text-text md:text-8xl lg:text-9xl">
           <span>Bills that stay</span>
           {/* Screen readers get one stable phrase; the rotating words are visual only. */}
           <span className="sr-only"> encrypted</span>
