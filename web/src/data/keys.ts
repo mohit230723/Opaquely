@@ -16,4 +16,5 @@ export const queryKeys = {
   myPurchases: (scope: DataScope) => scoped("my-purchases", scope),
   activity: (scope: DataScope) => scoped("activity", scope),
   chainView: (scope: DataScope, datasetId: string) => scoped("chain-view", scope, datasetId),
+  analytics: (scope: DataScope, datasetId: string) => scoped("analytics", scope, datasetId),
 };

@@ -9,12 +9,12 @@ import { StatusChip } from "@/components/ui/StatusChip";
 import type { Purchase } from "@/data/types";
 import { formatDate, formatEth, shortAddress, shortHash } from "@/lib/format";
 
-/** Analytics arrive in Milestone 2. Until then the button is present, blocked, and says why. */
-export const VIEW_ANALYTICS_HELPER = "Coming in Milestone 2.";
+/** What View Analytics does, under the button. */
+export const VIEW_ANALYTICS_HELPER = "Decrypt the totals with one wallet signature.";
 
 /**
  * One dataset this wallet bought, as a GlowCard. It shows only the purchase record (title, price paid, date,
- * seller, transaction, access). View Analytics is a placeholder: no number sits behind it.
+ * seller, transaction, access). View Analytics opens the page where this wallet decrypts the aggregate totals.
  */
 export function BoughtDatasetCard({ purchase }: { purchase: Purchase }) {
   const helperId = useId();
@@ -50,7 +50,12 @@ export function BoughtDatasetCard({ purchase }: { purchase: Purchase }) {
         </dl>
       </div>
       <div className="flex flex-col items-start gap-2">
-        <Button variant="secondary" disabled aria-describedby={helperId}>
+        <Button
+          variant="secondary"
+          href={`/analytics/${encodeURIComponent(purchase.datasetId)}`}
+          disabled={!purchase.hasAccess}
+          aria-describedby={helperId}
+        >
           View Analytics
         </Button>
         <p id={helperId} className="text-sm text-muted">

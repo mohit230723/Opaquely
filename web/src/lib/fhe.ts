@@ -58,3 +58,26 @@ export async function encryptBill(
   const [amount, category, date] = enc.encryptedValues;
   return { amount, category, date, inputProof: enc.inputProof };
 }
+
+/**
+ * User decryption: the connected wallet signs one EIP-712 permit (cached by the SDK for the session) and the
+ * relayer returns the clear values of `handles`, which must all belong to `contractAddress` and be allowed for
+ * this wallet on-chain (FHE.allow). Zero handles come back as 0n without a relayer call.
+ */
+export async function decryptHandles(
+  chainId: number,
+  clients: ZamaClients,
+  contractAddress: Address,
+  handles: readonly Hex[],
+): Promise<bigint[]> {
+  const sdk = await getFhevm(chainId, clients);
+  const contract = getAddress(contractAddress);
+  const clear = await sdk.decryption.decryptValues(handles.map((h) => ({ encryptedValue: h, contractAddress: contract })));
+  return handles.map((h) => {
+    const v = clear[h];
+    if (typeof v === "bigint") return v;
+    if (typeof v === "boolean") return v ? 1n : 0n;
+    if (v === undefined) throw new Error("The relayer returned no value for a handle.");
+    return BigInt(v);
+  });
+}

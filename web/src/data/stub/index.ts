@@ -1,7 +1,7 @@
-import type { ActivityEvent, BillFields, ChainViewRow, Dataset, Hex, Listing, Purchase } from "../types";
+import type { ActivityEvent, BillFields, ChainViewRow, Dataset, DatasetAnalytics, Hex, Listing, Purchase } from "../types";
 import type { DataLayer } from "../data-layer";
 import { MIN_BILLS_TO_LIST } from "@/lib/constants";
-import { isCategoryId } from "@/lib/categories";
+import { CATEGORIES, isCategoryId } from "@/lib/categories";
 import { ReadableTxError, REVERT_REASONS } from "@/lib/tx-errors";
 import {
   accountFor,
@@ -39,6 +39,34 @@ function slugify(name: string): string {
   // "new" is the create-form route segment, so a dataset with that id would be unreachable.
   if (slug === "new") return "new-dataset";
   return slug || "dataset";
+}
+
+const STUB_ANOMALY_THRESHOLD_CENTS = 500_000n;
+
+/** Demo totals for the stub: stable per dataset, spread over the categories it declares. Never real data. */
+function stubAnalytics(datasetId: string, billCount: number, categories: readonly number[]): DatasetAnalytics {
+  let seed = 0;
+  for (const ch of datasetId) seed = (seed * 31 + ch.charCodeAt(0)) >>> 0;
+  const next = () => {
+    seed = (seed * 1103515245 + 12345) >>> 0;
+    return seed;
+  };
+  const used = categories.length > 0 ? categories : [CATEGORIES.length - 1];
+  const totals = CATEGORIES.map(() => 0n);
+  let anomalies = 0;
+  for (let i = 0; i < billCount; i++) {
+    const cents = BigInt(20_000 + (next() % 700_000));
+    if (cents > STUB_ANOMALY_THRESHOLD_CENTS) anomalies += 1;
+    totals[used[i % used.length]] += cents;
+  }
+  return {
+    datasetId,
+    categoryTotalsCents: totals,
+    grandTotalCents: totals.reduce((a, b) => a + b, 0n),
+    billCount,
+    anomalyCount: anomalies,
+    anomalyThresholdCents: STUB_ANOMALY_THRESHOLD_CENTS,
+  };
 }
 
 function copyDataset(d: Dataset): Dataset {
@@ -144,6 +172,18 @@ export function createStubDataLayer(opts: StubOptions): DataLayer {
       await beforeRead(address, latency?.readMs);
       if (address) seededAccount(address);
       return newestFirst(allActivity(), (e) => e.at).map((e) => ({ ...e }));
+    },
+
+    async decryptAnalytics(datasetId) {
+      await beforeRead(address, latency?.readMs);
+      if (!address) throw new ReadableTxError("Connect your wallet to continue.");
+      const acct = seededAccount(address);
+      const own = acct.datasets.find((d) => d.id === datasetId);
+      if (own) return stubAnalytics(datasetId, own.billCount, own.categories);
+      const bought = acct.purchases.find((p) => p.datasetId === datasetId && p.hasAccess);
+      const listing = bought ? allListings().get(bought.listingId) : undefined;
+      if (!listing) throw new ReadableTxError("This wallet has no access to these analytics. Buy the dataset first.", "reverted");
+      return stubAnalytics(datasetId, listing.recordCount, listing.categories);
     },
 
     async getChainView(datasetId) {
@@ -273,6 +313,7 @@ export function createStubDataLayer(opts: StubOptions): DataLayer {
           const listing = checkBuy(me, listingId, expectedPriceWei);
           const purchase: Purchase = {
             listingId,
+            datasetId: listing.datasetId,
             title: listing.title,
             seller: listing.seller,
             priceWei: listing.priceWei,

@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef } from "react";
+import { useCallback, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTx, type UseTx } from "@/lib/use-tx";
 import { recordSessionBill } from "@/lib/session-bills";
@@ -102,6 +102,31 @@ export function useChainView(datasetId: string) {
     queryFn: () => layer.getChainView(datasetId),
     enabled: Boolean(scope.address),
   });
+}
+
+/**
+ * A dataset's decrypted analytics. Nothing runs until decrypt() is called, because decrypting asks the wallet
+ * for a signature; after that the clear totals stay cached for this wallet (never refetched in the background).
+ */
+export function useAnalytics(datasetId: string) {
+  const layer = useDataLayer();
+  const scope = useDataScope();
+  const [requested, setRequested] = useState(false);
+  const query = useQuery({
+    queryKey: queryKeys.analytics(scope, datasetId),
+    queryFn: () => layer.decryptAnalytics(datasetId),
+    enabled: requested && Boolean(scope.address),
+    retry: false,
+    staleTime: Infinity,
+    gcTime: Infinity,
+    refetchOnWindowFocus: false,
+  });
+  const { refetch } = query;
+  const decrypt = useCallback(() => {
+    if (requested) void refetch();
+    else setRequested(true);
+  }, [requested, refetch]);
+  return { query, decrypt };
 }
 
 // ---- writes: useTx over a DataLayer method, refreshing exactly the queries the write touches ----

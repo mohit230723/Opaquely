@@ -65,7 +65,14 @@ export function ListedDatasetCard({ dataset, sales, salesState }: ListedDatasetC
             Continue in Upload
           </Button>
         </div>
-      ) : null}
+      ) : (
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <span className="text-sm text-muted">Your encrypted totals</span>
+          <Button variant="secondary" href={`/analytics/${encodeURIComponent(dataset.id)}`}>
+            View Analytics
+          </Button>
+        </div>
+      )}
     </Card>
   );
 }

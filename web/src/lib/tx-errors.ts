@@ -51,6 +51,14 @@ export function encryptFailureReason(e: unknown): string {
   return ENCRYPT_FAILED_REASON;
 }
 
+/** The reason shown when a user decryption fails (never the SDK's text). */
+export function decryptFailureReason(chainId: number | undefined): string {
+  return chainId === HARDHAT_DECRYPT_CHAIN
+    ? "Decryption failed. Is the local node running?"
+    : "Decryption failed. The Zama relayer may be busy; try again in a minute.";
+}
+const HARDHAT_DECRYPT_CHAIN = 31337;
+
 /** An error whose message is already fit to show the user. The stub throws these. */
 export class ReadableTxError extends Error {
   readonly reason: string;

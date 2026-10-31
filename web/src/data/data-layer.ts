@@ -3,6 +3,7 @@ import type {
   BillFields,
   ChainViewRow,
   Dataset,
+  DatasetAnalytics,
   Listing,
   Purchase,
   SellerStats,
@@ -30,6 +31,11 @@ export interface DataLayer {
   listActivity(): Promise<ActivityEvent[]>;
   /** Ciphertext handles only, never plaintext. */
   getChainView(datasetId: string): Promise<ChainViewRow[]>;
+  /**
+   * Decrypts the dataset's aggregate totals for the connected wallet (one EIP-712 signature per session).
+   * Works for the seller and for any buyer the contract granted; everyone else is refused.
+   */
+  decryptAnalytics(datasetId: string): Promise<DatasetAnalytics>;
 
   /** The dataset exists after handle.wait(), with createdId in the receipt. */
   createDataset(input: { name: string }): Promise<TxHandle>;

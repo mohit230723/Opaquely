@@ -17,9 +17,15 @@ import {
 import { getDeployment, type Deployment } from "@/contracts";
 import { CATEGORIES, isCategoryId } from "@/lib/categories";
 import { HARDHAT_CHAIN_ID } from "@/lib/constants";
-import { encryptBill } from "@/lib/fhe";
+import { decryptHandles, encryptBill } from "@/lib/fhe";
 import { declaredCategories } from "@/lib/session-bills";
-import { ReadableTxError, WRONG_NETWORK_REASON, encryptFailureReason } from "@/lib/tx-errors";
+import {
+  ReadableTxError,
+  USER_REJECTED_REASON,
+  WRONG_NETWORK_REASON,
+  decryptFailureReason,
+  encryptFailureReason,
+} from "@/lib/tx-errors";
 import type { DataLayer } from "../data-layer";
 import { getContractEventsChunked, waitForHead, type LogsClient } from "./logs";
 
@@ -30,6 +36,7 @@ import type {
   BillFields,
   ChainViewRow,
   Dataset,
+  DatasetAnalytics,
   Hex,
   Listing,
   Purchase,
@@ -225,6 +232,47 @@ export function createLiveDataLayer({ config, address, chainId }: LiveOptions): 
       }));
     },
 
+    async decryptAnalytics(datasetId) {
+      const me = requireAddress();
+      const id = parseId(datasetId);
+      if (id === null) throw revert("Dataset not found.");
+      const d = need();
+      const [row, aggregates, threshold] = await Promise.all([
+        read<ChainDataset>(d.registry, "getDataset", [id]),
+        read<readonly [readonly Hex[], Hex, Hex, Hex]>(d.registry, "getAggregates", [id]),
+        read<bigint>(d.registry, "anomalyThresholdCents"),
+      ]);
+      if (!row.owner || row.owner === ZERO) throw revert("Dataset not found.");
+      const [categoryTotals, grandTotal, recordCount, anomalyCount] = aggregates;
+      // Ask the ACL before asking the wallet to sign: a wallet without a grant gets a plain refusal.
+      const isOwner = row.owner.toLowerCase() === me.toLowerCase();
+      if (!isOwner && !(await read<boolean>(d.registry, "canAccess", [grandTotal, me]))) {
+        throw new ReadableTxError("This wallet has no access to these analytics. Buy the dataset first.", "reverted");
+      }
+      const publicClient = getPublicClient(config, { chainId });
+      const walletClient = await getWalletClient(config, { chainId, account: me });
+      if (!publicClient || !walletClient) throw new ReadableTxError("Connect your wallet to continue.");
+      // Only the aggregate handles are sent for decryption; the per-bill handles never are.
+      const handles: Hex[] = [...categoryTotals, grandTotal, recordCount, anomalyCount];
+      let clear: bigint[];
+      try {
+        clear = await decryptHandles(chainId, { publicClient, walletClient } as never, d.registry.address, handles);
+      } catch (e) {
+        const rejected = e instanceof Error && (e.name === "SigningRejectedError" || (e as { code?: unknown }).code === 4001);
+        throw new ReadableTxError(rejected ? USER_REJECTED_REASON : decryptFailureReason(chainId), rejected ? "user_rejected" : "unknown");
+      }
+      const n = categoryTotals.length;
+      const result: DatasetAnalytics = {
+        datasetId,
+        categoryTotalsCents: clear.slice(0, n),
+        grandTotalCents: clear[n],
+        billCount: Number(clear[n + 1]),
+        anomalyCount: Number(clear[n + 2]),
+        anomalyThresholdCents: threshold,
+      };
+      return result;
+    },
+
     async listListings() {
       const d = need();
       const out: Listing[] = [];
@@ -280,6 +328,7 @@ export function createLiveDataLayer({ config, address, chainId }: LiveOptions): 
           const listing = await read<ChainListing>(d.market, "getListing", [r.listingId]);
           return {
             listingId: r.listingId.toString(),
+            datasetId: listing.datasetId.toString(),
             title: listing.title,
             seller: listing.seller,
             priceWei: r.priceWei,

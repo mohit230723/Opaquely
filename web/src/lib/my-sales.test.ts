@@ -18,6 +18,7 @@ function event(partial: Partial<ActivityEvent>): ActivityEvent {
 function purchase(priceEth: string, listingId = "X"): Purchase {
   return {
     listingId,
+    datasetId: listingId,
     title: "T",
     seller: OTHER_SELLER,
     priceWei: parseEther(priceEth),

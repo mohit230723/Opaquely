@@ -192,6 +192,7 @@ export function seedAccount(address: Hex, groceries: Listing): AccountSeed {
   const purchases: Purchase[] = [
     {
       listingId: groceries.id,
+      datasetId: groceries.datasetId,
       title: groceries.title,
       seller: groceries.seller,
       priceWei: groceries.priceWei,

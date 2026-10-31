@@ -30,12 +30,29 @@ export interface Listing {
 
 export interface Purchase {
   listingId: string;
+  /** The dataset behind the listing: the key for its analytics. */
+  datasetId: string;
   title: string;
   seller: Hex;
   priceWei: bigint;
   txHash: Hex;
   purchasedAt: number;
   hasAccess: boolean;
+}
+
+/**
+ * A dataset's encrypted aggregates after the connected wallet decrypted them (seller, or a buyer with access).
+ * Only these totals are ever decrypted for a buyer; the per-bill ciphertexts stay sealed.
+ */
+export interface DatasetAnalytics {
+  datasetId: string;
+  /** Indexed by category id (lib/categories.ts). */
+  categoryTotalsCents: bigint[];
+  grandTotalCents: bigint;
+  billCount: number;
+  anomalyCount: number;
+  /** A bill above this many cents counts as an anomaly (public contract constant). */
+  anomalyThresholdCents: bigint;
 }
 
 export interface SellerStats {
