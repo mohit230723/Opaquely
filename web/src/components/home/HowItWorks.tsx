@@ -12,7 +12,7 @@ const STEPS = [
 // The only `ol` on Home: six glow cards, 6 columns from 1024px, 3 from 768px, 1 below.
 export function HowItWorks() {
   return (
-    <section className="bg-bg">
+    <section id="how-it-works" className="scroll-mt-20 bg-bg">
       <div className="mx-auto w-full max-w-6xl px-4 py-16 sm:px-6">
         <h2 className="text-2xl font-semibold text-text">How it works</h2>
         <ol className="mt-8 grid grid-cols-1 gap-4 md:grid-cols-3 lg:grid-cols-6">
