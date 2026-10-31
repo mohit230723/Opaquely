@@ -54,6 +54,17 @@ contract DatasetRegistry is ZamaEthereumConfig, IDatasetRegistry {
         euint32 anomalyCount;
     }
 
+    /// Encrypted ML insights (Milestone 2). The seller's helper runs Concrete ML models blind on an FHE server,
+    /// decrypts only these results on the seller's own machine, and the seller's browser re-encrypts them here.
+    /// Only aggregates: six monthly spend totals, a next-month forecast, the model's anomaly count and a
+    /// five-bucket histogram of anomaly scores. No per-bill value is ever stored for a buyer.
+    struct Insights {
+        euint64[6] monthTotals;
+        euint64 forecast;
+        euint32 mlAnomalyCount;
+        euint32[5] scoreBuckets;
+    }
+
     /// Public view row for the "what the chain sees" panel: handles only.
     struct BillHandles {
         uint32 index;
@@ -77,12 +88,18 @@ contract DatasetRegistry is ZamaEthereumConfig, IDatasetRegistry {
     mapping(uint256 => Aggregates) private _aggregates;
     mapping(address => uint256[]) private _byOwner;
     mapping(uint256 => mapping(address => bool)) private _access;
+    mapping(uint256 => Insights) private _insights;
+    /// Months since January 1970 of the first of the six monthly totals; 0 means "no insights yet".
+    mapping(uint256 => uint32) public insightsMonthStart;
+    /// Every buyer of a dataset, so insights stored after a sale are granted to earlier buyers too.
+    mapping(uint256 => address[]) private _buyers;
 
     event DatasetCreated(uint256 indexed datasetId, address indexed owner, string name);
     event RecordAdded(uint256 indexed datasetId, address indexed owner, uint32 recordCount);
     event DatasetSealed(uint256 indexed datasetId, uint32 recordCount);
     event AccessGranted(uint256 indexed datasetId, address indexed buyer);
     event MarketplaceSet(address indexed marketplace);
+    event InsightsSet(uint256 indexed datasetId, uint32 monthStart);
 
     error InvalidName();
     error DatasetNotFound(uint256 datasetId);
@@ -95,6 +112,7 @@ contract DatasetRegistry is ZamaEthereumConfig, IDatasetRegistry {
     error MarketplaceAlreadySet();
     error InvalidMarketplace();
     error NotSealed();
+    error InvalidMonthStart();
 
     modifier onlyMarketplace() {
         if (marketplace == address(0) || msg.sender != marketplace) revert OnlyMarketplace();
@@ -176,6 +194,32 @@ contract DatasetRegistry is ZamaEthereumConfig, IDatasetRegistry {
         emit RecordAdded(datasetId, msg.sender, ds.recordCount);
     }
 
+    /// Stores (or replaces) the dataset's encrypted ML insights. One input proof covers all 13 values.
+    /// u64s = six monthly totals then the forecast; u32s = the ML anomaly count then five score buckets.
+    function setInsights(
+        uint256 datasetId,
+        uint32 monthStart,
+        externalEuint64[7] calldata u64s,
+        externalEuint32[6] calldata u32s,
+        bytes calldata inputProof
+    ) external {
+        Dataset storage ds = _datasets[datasetId];
+        if (ds.owner == address(0)) revert DatasetNotFound(datasetId);
+        if (ds.owner != msg.sender) revert NotDatasetOwner();
+        if (monthStart == 0) revert InvalidMonthStart();
+
+        Insights storage ins = _insights[datasetId];
+        for (uint8 i = 0; i < 6; ++i) ins.monthTotals[i] = _store(FHE.fromExternal(u64s[i], inputProof), msg.sender);
+        ins.forecast = _store(FHE.fromExternal(u64s[6], inputProof), msg.sender);
+        ins.mlAnomalyCount = _store(FHE.fromExternal(u32s[0], inputProof), msg.sender);
+        for (uint8 i = 0; i < 5; ++i) ins.scoreBuckets[i] = _store(FHE.fromExternal(u32s[i + 1], inputProof), msg.sender);
+        insightsMonthStart[datasetId] = monthStart;
+
+        address[] storage buyers = _buyers[datasetId];
+        for (uint256 b = 0; b < buyers.length; ++b) _allowInsights(ins, buyers[b]);
+        emit InsightsSet(datasetId, monthStart);
+    }
+
     // ---------------------------------------------------------------- marketplace-only
 
     function sealForListing(uint256 datasetId, address seller) external onlyMarketplace returns (uint32) {
@@ -197,6 +241,8 @@ contract DatasetRegistry is ZamaEthereumConfig, IDatasetRegistry {
         FHE.allow(agg.grandTotal, buyer);
         FHE.allow(agg.recordCount, buyer);
         FHE.allow(agg.anomalyCount, buyer);
+        _buyers[datasetId].push(buyer);
+        if (insightsMonthStart[datasetId] != 0) _allowInsights(_insights[datasetId], buyer);
         emit AccessGranted(datasetId, buyer);
     }
 
@@ -224,6 +270,21 @@ contract DatasetRegistry is ZamaEthereumConfig, IDatasetRegistry {
     {
         Aggregates storage agg = _aggregates[datasetId];
         return (agg.categoryTotals, agg.grandTotal, agg.recordCount, agg.anomalyCount);
+    }
+
+    function getInsights(uint256 datasetId)
+        external
+        view
+        returns (
+            uint32 monthStart,
+            euint64[6] memory monthTotals,
+            euint64 forecast,
+            euint32 mlAnomalyCount,
+            euint32[5] memory scoreBuckets
+        )
+    {
+        Insights storage ins = _insights[datasetId];
+        return (insightsMonthStart[datasetId], ins.monthTotals, ins.forecast, ins.mlAnomalyCount, ins.scoreBuckets);
     }
 
     function getBillHandles(uint256 datasetId) external view returns (BillHandles[] memory rows) {
@@ -258,6 +319,13 @@ contract DatasetRegistry is ZamaEthereumConfig, IDatasetRegistry {
         FHE.allowThis(h);
         FHE.allow(h, owner);
         return h;
+    }
+
+    function _allowInsights(Insights storage ins, address buyer) private {
+        for (uint8 i = 0; i < 6; ++i) FHE.allow(ins.monthTotals[i], buyer);
+        FHE.allow(ins.forecast, buyer);
+        FHE.allow(ins.mlAnomalyCount, buyer);
+        for (uint8 i = 0; i < 5; ++i) FHE.allow(ins.scoreBuckets[i], buyer);
     }
 
     function _view(uint256 datasetId) private view returns (DatasetView memory) {

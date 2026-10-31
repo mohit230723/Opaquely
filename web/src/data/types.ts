@@ -53,6 +53,22 @@ export interface DatasetAnalytics {
   anomalyCount: number;
   /** A bill above this many cents counts as an anomaly (public contract constant). */
   anomalyThresholdCents: bigint;
+  /** The Concrete ML insights, once the seller ran the models; null before that. */
+  insights: MlInsights | null;
+}
+
+/** Aggregate results of the encrypted ML run, exactly what DatasetRegistry.setInsights stores. */
+export interface MlInsights {
+  /** Months since January 1970 of the first monthly total. */
+  monthStart: number;
+  /** Six monthly spend totals, oldest first. */
+  monthTotalsCents: bigint[];
+  /** Predicted spend for the month after the last total. */
+  forecastCents: bigint;
+  /** Bills the anomaly model scored at 0.5 or above. */
+  mlAnomalyCount: number;
+  /** Bills per anomaly-score band: 0-0.2, 0.2-0.4, 0.4-0.6, 0.6-0.8, 0.8-1. */
+  scoreBuckets: number[];
 }
 
 export interface SellerStats {

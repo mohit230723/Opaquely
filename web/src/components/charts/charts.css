@@ -1,0 +1,64 @@
+/*
+ * Chart tokens. The site is dark-only, so these are the dark steps of the reference palette, validated against
+ * the card face (#0d1538): blue then orange, both >= 3:1, CVD-separated. Text never wears a series color.
+ */
+.viz-root {
+  --series-1: #3987e5;
+  --series-2: #d95926;
+  --viz-grid: rgba(165, 216, 255, 0.08);
+  --viz-axis: rgba(165, 216, 255, 0.22);
+  --viz-surface: #0d1538;
+  position: relative;
+  min-width: 0;
+}
+
+.viz-tip {
+  position: absolute;
+  z-index: 20;
+  pointer-events: none;
+  transform: translate(-50%, calc(-100% - 12px));
+  min-width: 120px;
+  max-width: 260px;
+  padding: 8px 10px;
+  border: 1px solid rgba(165, 216, 255, 0.18);
+  border-radius: 8px;
+  background: rgba(5, 8, 22, 0.94);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  font-size: 13px;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
+.viz-swatch {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  flex: none;
+}
+
+.viz-swatch--dashed {
+  height: 0;
+  border-top: 2px dashed currentColor;
+  border-radius: 0;
+  width: 14px;
+}
+
+.viz-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+}
+
+.viz-table th,
+.viz-table td {
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--viz-grid);
+  text-align: right;
+}
+
+.viz-table th:first-child,
+.viz-table td:first-child {
+  text-align: left;
+}

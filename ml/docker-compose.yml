@@ -1,0 +1,34 @@
+# docker compose up --build
+#   trainer  trains + compiles both models once (artifacts volume), copies the public model card to the web app
+#   server   the FHE inference server (sees ciphertexts only)          http://127.0.0.1:8000
+#   helper   the seller-side helper the web app calls (holds the keys)  http://127.0.0.1:8765
+services:
+  trainer:
+    build: .
+    command: python train.py --if-missing --card-copy /web-public/model-card.json
+    volumes:
+      - artifacts:/artifacts
+      - ../web/public/ml:/web-public
+  server:
+    build: .
+    command: uvicorn server:app --host 0.0.0.0 --port 8000
+    volumes:
+      - artifacts:/artifacts
+    ports:
+      - "127.0.0.1:8000:8000"
+    depends_on:
+      trainer:
+        condition: service_completed_successfully
+  helper:
+    build: .
+    command: uvicorn helper:app --host 0.0.0.0 --port 8765
+    environment:
+      FHE_SERVER_URL: http://server:8000
+    volumes:
+      - artifacts:/artifacts
+    ports:
+      - "127.0.0.1:8765:8765"
+    depends_on:
+      - server
+volumes:
+  artifacts:

@@ -1,4 +1,14 @@
-import type { ActivityEvent, BillFields, ChainViewRow, Dataset, DatasetAnalytics, Hex, Listing, Purchase } from "../types";
+import type {
+  ActivityEvent,
+  BillFields,
+  ChainViewRow,
+  Dataset,
+  DatasetAnalytics,
+  Hex,
+  Listing,
+  MlInsights,
+  Purchase,
+} from "../types";
 import type { DataLayer } from "../data-layer";
 import { MIN_BILLS_TO_LIST } from "@/lib/constants";
 import { CATEGORIES, isCategoryId } from "@/lib/categories";
@@ -42,6 +52,8 @@ function slugify(name: string): string {
 }
 
 const STUB_ANOMALY_THRESHOLD_CENTS = 500_000n;
+/** ML insights stored by the stub's storeInsights, per dataset (tab memory). */
+const stubInsights = new Map<string, MlInsights>();
 
 /** Demo totals for the stub: stable per dataset, spread over the categories it declares. Never real data. */
 function stubAnalytics(datasetId: string, billCount: number, categories: readonly number[]): DatasetAnalytics {
@@ -66,7 +78,24 @@ function stubAnalytics(datasetId: string, billCount: number, categories: readonl
     billCount,
     anomalyCount: anomalies,
     anomalyThresholdCents: STUB_ANOMALY_THRESHOLD_CENTS,
+    insights: stubInsights.get(datasetId) ?? null,
   };
+}
+
+/** Demo bills for the stub's decryptOwnBills: spread over the last six months, stable per dataset. */
+function stubBills(datasetId: string, billCount: number, categories: readonly number[]): BillFields[] {
+  const a = stubAnalytics(datasetId, billCount, categories);
+  const today = Math.floor(stubNow() / 86_400_000);
+  const used = categories.length > 0 ? categories : [CATEGORIES.length - 1];
+  return Array.from({ length: billCount }, (_, i) => {
+    const category = used[i % used.length];
+    const share = BigInt(billCount);
+    return {
+      amountCents: a.grandTotalCents / share + BigInt((i * 7919) % 90_000),
+      category,
+      dateDays: today - ((i * 23) % 180),
+    };
+  });
 }
 
 function copyDataset(d: Dataset): Dataset {
@@ -184,6 +213,14 @@ export function createStubDataLayer(opts: StubOptions): DataLayer {
       const listing = bought ? allListings().get(bought.listingId) : undefined;
       if (!listing) throw new ReadableTxError("This wallet has no access to these analytics. Buy the dataset first.", "reverted");
       return stubAnalytics(datasetId, listing.recordCount, listing.categories);
+    },
+
+    async decryptOwnBills(datasetId) {
+      await beforeRead(address, latency?.readMs);
+      if (!address) throw new ReadableTxError("Connect your wallet to continue.");
+      const own = seededAccount(address).datasets.find((d) => d.id === datasetId);
+      if (!own) throw revert("Only the seller can read these bills.");
+      return stubBills(datasetId, own.billCount, own.categories);
     },
 
     async getChainView(datasetId) {
@@ -335,6 +372,19 @@ export function createStubDataLayer(opts: StubOptions): DataLayer {
             txHash: purchase.txHash,
             at: purchase.purchasedAt,
           });
+          return undefined;
+        },
+      });
+    },
+
+    async storeInsights(datasetId, insights) {
+      const me = requireAddress();
+      if (!seededAccount(me).datasets.some((d) => d.id === datasetId)) throw revert("Only the seller can store insights.");
+      return stubTx({
+        chainId: opts.chainId,
+        latency,
+        apply: () => {
+          stubInsights.set(datasetId, { ...insights });
           return undefined;
         },
       });

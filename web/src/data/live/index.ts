@@ -17,7 +17,7 @@ import {
 import { getDeployment, type Deployment } from "@/contracts";
 import { CATEGORIES, isCategoryId } from "@/lib/categories";
 import { HARDHAT_CHAIN_ID } from "@/lib/constants";
-import { decryptHandles, encryptBill } from "@/lib/fhe";
+import { decryptHandles, encryptBill, encryptInsights } from "@/lib/fhe";
 import { declaredCategories } from "@/lib/session-bills";
 import {
   ReadableTxError,
@@ -38,6 +38,7 @@ import type {
   Dataset,
   DatasetAnalytics,
   Hex,
+  MlInsights,
   Listing,
   Purchase,
   TxHandle,
@@ -237,11 +238,17 @@ export function createLiveDataLayer({ config, address, chainId }: LiveOptions): 
       const id = parseId(datasetId);
       if (id === null) throw revert("Dataset not found.");
       const d = need();
-      const [row, aggregates, threshold] = await Promise.all([
+      const [row, aggregates, threshold, insightRow] = await Promise.all([
         read<ChainDataset>(d.registry, "getDataset", [id]),
         read<readonly [readonly Hex[], Hex, Hex, Hex]>(d.registry, "getAggregates", [id]),
         read<bigint>(d.registry, "anomalyThresholdCents"),
+        // A registry deployed before Milestone 2 has no getInsights: treat it as "no insights yet".
+        read<readonly [number, readonly Hex[], Hex, Hex, readonly Hex[]]>(d.registry, "getInsights", [id]).catch(
+          () => [0, [], ZERO, ZERO, []] as const,
+        ),
       ]);
+      const [monthStart, monthTotals, forecast, mlAnomalyCount, scoreBuckets] = insightRow;
+      const hasInsights = Number(monthStart) !== 0;
       if (!row.owner || row.owner === ZERO) throw revert("Dataset not found.");
       const [categoryTotals, grandTotal, recordCount, anomalyCount] = aggregates;
       // Ask the ACL before asking the wallet to sign: a wallet without a grant gets a plain refusal.
@@ -254,6 +261,7 @@ export function createLiveDataLayer({ config, address, chainId }: LiveOptions): 
       if (!publicClient || !walletClient) throw new ReadableTxError("Connect your wallet to continue.");
       // Only the aggregate handles are sent for decryption; the per-bill handles never are.
       const handles: Hex[] = [...categoryTotals, grandTotal, recordCount, anomalyCount];
+      if (hasInsights) handles.push(...monthTotals, forecast, mlAnomalyCount, ...scoreBuckets);
       let clear: bigint[];
       try {
         clear = await decryptHandles(chainId, { publicClient, walletClient } as never, d.registry.address, handles);
@@ -269,8 +277,53 @@ export function createLiveDataLayer({ config, address, chainId }: LiveOptions): 
         billCount: Number(clear[n + 1]),
         anomalyCount: Number(clear[n + 2]),
         anomalyThresholdCents: threshold,
+        insights: null,
       };
+      if (hasInsights) {
+        const rest = clear.slice(n + 3);
+        result.insights = {
+          monthStart: Number(monthStart) - 1,
+          monthTotalsCents: rest.slice(0, 6),
+          forecastCents: rest[6],
+          mlAnomalyCount: Number(rest[7]),
+          scoreBuckets: rest.slice(8, 13).map(Number),
+        };
+      }
       return result;
+    },
+
+    async decryptOwnBills(datasetId) {
+      const me = requireAddress();
+      const id = parseId(datasetId);
+      if (id === null) throw revert("Dataset not found.");
+      const d = need();
+      const row = await read<ChainDataset>(d.registry, "getDataset", [id]);
+      if (row.owner.toLowerCase() !== me.toLowerCase()) throw revert("Only the seller can read these bills.");
+      const rows = await read<{ amountCents: Hex; category: Hex; dateDays: Hex }[]>(d.registry, "getBillHandles", [id]);
+      const publicClient = getPublicClient(config, { chainId });
+      const walletClient = await getWalletClient(config, { chainId, account: me });
+      if (!publicClient || !walletClient) throw new ReadableTxError("Connect your wallet to continue.");
+      // The relayer caps one user decryption at 2048 bits; 15 bills are 15 x 104 bits. The permit is reused.
+      const out: BillFields[] = [];
+      for (let i = 0; i < rows.length; i += 15) {
+        const chunk = rows.slice(i, i + 15);
+        let clear: bigint[];
+        try {
+          clear = await decryptHandles(
+            chainId,
+            { publicClient, walletClient } as never,
+            d.registry.address,
+            chunk.flatMap((r) => [r.amountCents, r.category, r.dateDays]),
+          );
+        } catch (e) {
+          const rejected = e instanceof Error && (e.name === "SigningRejectedError" || (e as { code?: unknown }).code === 4001);
+          throw new ReadableTxError(rejected ? USER_REJECTED_REASON : decryptFailureReason(chainId), rejected ? "user_rejected" : "unknown");
+        }
+        for (let j = 0; j < chunk.length; j++) {
+          out.push({ amountCents: clear[j * 3], category: Number(clear[j * 3 + 1]), dateDays: Number(clear[j * 3 + 2]) });
+        }
+      }
+      return out;
     },
 
     async listListings() {
@@ -441,6 +494,31 @@ export function createLiveDataLayer({ config, address, chainId }: LiveOptions): 
       if (id === null) throw revert("Listing not found.");
       const d = need();
       const hash = await send(d.market, "buyListing", [id, expectedPriceWei], expectedPriceWei);
+      return handle(hash);
+    },
+
+    async storeInsights(datasetId: string, insights: MlInsights) {
+      const me = requireAddress();
+      const id = parseId(datasetId);
+      if (id === null) throw revert("Dataset not found.");
+      if (insights.monthTotalsCents.length !== 6 || insights.scoreBuckets.length !== 5) {
+        throw new ReadableTxError("The ML helper returned an unexpected result.");
+      }
+      const d = need();
+      const publicClient = getPublicClient(config, { chainId });
+      const walletClient = await getWalletClient(config, { chainId, account: me });
+      if (!publicClient || !walletClient) throw new ReadableTxError("Connect your wallet to continue.");
+      let enc: Awaited<ReturnType<typeof encryptInsights>>;
+      try {
+        enc = await encryptInsights(chainId, { publicClient, walletClient } as never, d.registry.address, {
+          u64s: [...insights.monthTotalsCents, insights.forecastCents],
+          u32s: [BigInt(insights.mlAnomalyCount), ...insights.scoreBuckets.map((b) => BigInt(b))],
+        });
+      } catch (e) {
+        throw new ReadableTxError(encryptFailureReason(e));
+      }
+      // On-chain monthStart is months since January 1970 plus one, so 0 can mean "no insights".
+      const hash = await send(d.registry, "setInsights", [id, insights.monthStart + 1, enc.u64s, enc.u32s, enc.inputProof]);
       return handle(hash);
     },
 

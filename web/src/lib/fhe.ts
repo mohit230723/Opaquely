@@ -81,3 +81,30 @@ export async function decryptHandles(
     return BigInt(v);
   });
 }
+
+export type EncryptedInsights = { u64s: Hex[]; u32s: Hex[]; inputProof: Hex };
+
+/**
+ * Encrypts the ML insights as ONE batch for DatasetRegistry.setInsights: seven uint64 values (six monthly
+ * totals, then the forecast) and six uint32 values (the ML anomaly count, then five score buckets).
+ */
+export async function encryptInsights(
+  chainId: number,
+  clients: ZamaClients,
+  contractAddress: Address,
+  values: { u64s: readonly bigint[]; u32s: readonly bigint[] },
+): Promise<EncryptedInsights> {
+  const sdk = await getFhevm(chainId, clients);
+  const userAddress = clients.walletClient.account?.address;
+  if (!userAddress) throw new Error(WALLET_REQUIRED_MESSAGE);
+  const enc = await sdk.encrypt({
+    values: [
+      ...values.u64s.map((value) => ({ value, type: "euint64" as const })),
+      ...values.u32s.map((value) => ({ value, type: "euint32" as const })),
+    ],
+    contractAddress: getAddress(contractAddress),
+    userAddress: getAddress(userAddress),
+  });
+  const n = values.u64s.length;
+  return { u64s: enc.encryptedValues.slice(0, n), u32s: enc.encryptedValues.slice(n), inputProof: enc.inputProof };
+}

@@ -4,6 +4,8 @@ import { useCallback, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTx, type UseTx } from "@/lib/use-tx";
 import { recordSessionBill } from "@/lib/session-bills";
+import { runEncryptedMl, type MlRun } from "@/lib/ml-helper";
+import { toReadableError } from "@/lib/tx-errors";
 import { sendEncryptBill } from "./encrypt-bill";
 import { useDataLayer, useDataScope } from "./provider";
 import { queryKeys } from "./keys";
@@ -127,6 +129,45 @@ export function useAnalytics(datasetId: string) {
     else setRequested(true);
   }, [requested, refetch]);
   return { query, decrypt };
+}
+
+export type MlStep = "idle" | "decrypting" | "inference" | "storing" | "confirming" | "done" | "error";
+
+/**
+ * Seller only: the encrypted ML run. Decrypt the seller's own bills (wallet signature), let the local helper
+ * run the Concrete ML models blind on the FHE server, then re-encrypt the aggregate insights with FHEVM and
+ * store them on-chain (one transaction). Refreshes the analytics once the transaction confirms.
+ */
+export function useRunMl(datasetId: string) {
+  const layer = useDataLayer();
+  const scope = useDataScope();
+  const queryClient = useQueryClient();
+  const [step, setStep] = useState<MlStep>("idle");
+  const [error, setError] = useState<string | null>(null);
+  const [run, setRun] = useState<MlRun | null>(null);
+
+  const start = useCallback(async () => {
+    setError(null);
+    try {
+      setStep("decrypting");
+      const bills = await layer.decryptOwnBills(datasetId);
+      setStep("inference");
+      const result = await runEncryptedMl(bills);
+      setRun(result);
+      setStep("storing");
+      const tx = await layer.storeInsights(datasetId, result.insights);
+      setStep("confirming");
+      const receipt = await tx.wait();
+      if (receipt.status !== "success") throw new Error("Storing the insights was reverted.");
+      await queryClient.refetchQueries({ queryKey: queryKeys.analytics(scope, datasetId) });
+      setStep("done");
+    } catch (e) {
+      setError(e instanceof Error && !(e as { shortMessage?: unknown }).shortMessage ? e.message : toReadableError(e).reason);
+      setStep("error");
+    }
+  }, [layer, datasetId, queryClient, scope]);
+
+  return { step, error, run, start };
 }
 
 // ---- writes: useTx over a DataLayer method, refreshing exactly the queries the write touches ----

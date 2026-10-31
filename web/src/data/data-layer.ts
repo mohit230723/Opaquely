@@ -5,6 +5,7 @@ import type {
   Dataset,
   DatasetAnalytics,
   Listing,
+  MlInsights,
   Purchase,
   SellerStats,
   TxHandle,
@@ -36,6 +37,8 @@ export interface DataLayer {
    * Works for the seller and for any buyer the contract granted; everyone else is refused.
    */
   decryptAnalytics(datasetId: string): Promise<DatasetAnalytics>;
+  /** The seller's own bills, decrypted for the seller's wallet only (input for the ML helper). */
+  decryptOwnBills(datasetId: string): Promise<BillFields[]>;
 
   /** The dataset exists after handle.wait(), with createdId in the receipt. */
   createDataset(input: { name: string }): Promise<TxHandle>;
@@ -48,4 +51,6 @@ export interface DataLayer {
   /** expectedPriceWei is the price the buyer saw; Phase 5 sends it as msg.value. */
   buyListing(listingId: string, expectedPriceWei: bigint): Promise<TxHandle>;
   withdraw(): Promise<TxHandle>;
+  /** Seller only: re-encrypts the ML insights with FHEVM and stores them; buyers are granted them on-chain. */
+  storeInsights(datasetId: string, insights: MlInsights): Promise<TxHandle>;
 }
