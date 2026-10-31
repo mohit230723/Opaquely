@@ -39,7 +39,7 @@ function AnimatedHero() {
               <motion.span
                 key={title}
                 className="absolute font-semibold text-accent-bright"
-                initial={{ opacity: 0, y: "-100" }}
+                initial={{ opacity: 0, y: -100 }}
                 transition={{ type: "spring", stiffness: 50 }}
                 animate={
                   titleNumber === index
