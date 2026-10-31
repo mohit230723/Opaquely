@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { motion, useReducedMotion } from "framer-motion";
-import { MoveDown, MoveRight } from "lucide-react";
+import { MoveRight } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 
 // Adapted from the 21st.dev animated-hero: the project's own specular Button replaces the shadcn button
@@ -25,9 +25,6 @@ function AnimatedHero() {
 
   return (
     <div className="flex w-full flex-col items-center justify-center gap-8">
-      <Button variant="secondary" href="#how-it-works">
-        See how it works <MoveDown aria-hidden="true" className="h-4 w-4" />
-      </Button>
       <div className="flex flex-col gap-4">
         <h1 className="max-w-3xl text-center text-5xl font-normal tracking-tighter text-text md:text-7xl">
           <span>Bills that stay</span>
