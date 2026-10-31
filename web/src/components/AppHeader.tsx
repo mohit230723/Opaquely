@@ -9,13 +9,15 @@ import { BRAND, WORDMARK_RATIO } from "@/lib/brand";
 
 const WORDMARK_HEIGHT = 40;
 
+// Equal left and right padding keeps the middle column on the true viewport center; the right column
+// reserves the Menu toggle space itself.
 // Transparent and fixed over the page, so the home hero runs up behind it (the layout adds a 64px spacer
-// that the hero pulls back). The nav is absolutely centered on the viewport, whatever the logo width.
+// that the hero pulls back). Three columns keep the nav centered on the viewport whatever the logo width.
 // No backdrop-blur, transform, filter, contain or overflow-hidden here: the fixed menu overlay and the
 // GooeyNav canvas (which reaches 72px past the nav) must position against the viewport, not the header.
 export function AppHeader() {
   return (
-    <header className="fixed inset-x-0 top-0 z-40 flex min-h-16 items-center justify-between gap-x-4 bg-transparent pl-4 pr-[120px] sm:pl-6">
+    <header className="fixed inset-x-0 top-0 z-40 grid min-h-16 grid-cols-[1fr_auto_1fr] items-center gap-x-4 bg-transparent px-4 sm:px-6">
       <Link href="/" aria-label="Opaquely" className="flex h-16 shrink-0 items-center justify-self-start">
         <Image
           src={BRAND.wordmark}
@@ -30,7 +32,7 @@ export function AppHeader() {
       </Link>
       <SiteNav />
       {/* From 768px the wallet lives inside the nav pill; below that the nav is hidden, so it sits here. */}
-      <div className="flex min-h-16 min-w-0 items-center justify-end gap-x-3 justify-self-end py-2 md:hidden">
+      <div className="flex min-h-16 min-w-0 items-center justify-end gap-x-3 justify-self-end py-2 pr-[96px] sm:pr-[104px] md:hidden">
         <ConnectButton showBalance={false} accountStatus={{ smallScreen: "avatar", largeScreen: "address" }} />
       </div>
       {/* Fixed overlay; its Menu toggle is drawn in the 120px reserved at the right of the header. */}
