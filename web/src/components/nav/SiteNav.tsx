@@ -13,10 +13,14 @@ const NAV_STYLE = {
   "--gn-x": "20px",
 };
 
-// The frame GooeyNav would draw, drawn here instead so the wallet button sits inside the same pill.
+// Glass pill drawn here (not by GooeyNav) so the wallet button sits inside it: a light translucent tint,
+// a backdrop blur of whatever scrolls behind, a thin bright rim and a soft drop shadow.
 const FRAME_STYLE = {
-  background: "rgba(11,18,48,0.7)",
-  boxShadow: "inset 0 0 0 1px rgba(165,216,255,0.14), inset 0 1px 0 rgba(165,216,255,0.10)",
+  background: "linear-gradient(135deg, rgba(255,255,255,0.16), rgba(255,255,255,0.05))",
+  backdropFilter: "blur(18px) saturate(170%)",
+  WebkitBackdropFilter: "blur(18px) saturate(170%)",
+  border: "1px solid rgba(255,255,255,0.22)",
+  boxShadow: "0 8px 32px rgba(5,8,22,0.35), inset 0 1px 0 rgba(255,255,255,0.25)",
 };
 
 const WALLET_CLASS =
@@ -58,6 +62,7 @@ export function SiteNav() {
   const current = activeIndex(usePathname());
 
   return (
+    // Pinned to the exact middle of the fixed header, independent of the logo and Menu column widths.
     <div className="absolute left-1/2 top-1/2 hidden -translate-x-1/2 -translate-y-1/2 md:flex">
       <div className="flex items-center gap-1 rounded-full p-1.5" style={FRAME_STYLE}>
         <GooeyNav
