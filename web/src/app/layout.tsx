@@ -28,6 +28,8 @@ export default function RootLayout({ children }: { children: ReactNode }) {
           {/* Footer at the bottom of the flow: after the content on long pages, at the viewport bottom on short ones. */}
           <div className="flex min-h-dvh flex-col">
             <AppHeader />
+            {/* The header is fixed and transparent; this spacer keeps content below it (the home hero pulls it back). */}
+            <div aria-hidden="true" className="h-16 shrink-0" />
             <div className="flex flex-1 flex-col">
               <NetworkGate>
                 <DeploymentGuard>

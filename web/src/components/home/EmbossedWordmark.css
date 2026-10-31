@@ -1,6 +1,6 @@
 /* Relief for the outlined "Opaquely" artwork: a light top-left edge and a dark bottom-right edge (07-UI-SPEC). */
 .emboss-wordmark {
-  width: min(100%, 960px);
+  width: min(100%, 720px);
   height: auto;
   filter:
     drop-shadow(-1px -1px 0 rgba(165, 216, 255, 0.45))   /* top-left highlight */

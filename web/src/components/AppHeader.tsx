@@ -3,19 +3,20 @@
 import Image from "next/image";
 import Link from "next/link";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
-import { NetworkBadge } from "@/components/NetworkBadge";
 import { SiteMenu } from "@/components/nav/SiteMenu";
 import { SiteNav } from "@/components/nav/SiteNav";
 import { BRAND, WORDMARK_RATIO } from "@/lib/brand";
 
-const WORDMARK_HEIGHT = 36;
+const WORDMARK_HEIGHT = 40;
 
+// Transparent and fixed over the page, so the home hero runs up behind it (the layout adds a 64px spacer
+// that the hero pulls back). Three columns keep the nav centered on the viewport whatever the logo width.
 // No backdrop-blur, transform, filter, contain or overflow-hidden here: the fixed menu overlay and the
 // GooeyNav canvas (which reaches 72px past the nav) must position against the viewport, not the header.
 export function AppHeader() {
   return (
-    <header className="sticky top-0 z-40 flex min-h-16 items-center gap-x-4 border-b border-border bg-surface pl-4 pr-[120px] sm:pl-6">
-      <Link href="/" aria-label="Opaquely" className="flex h-16 shrink-0 items-center">
+    <header className="fixed inset-x-0 top-0 z-40 grid min-h-16 grid-cols-[1fr_auto_1fr] items-center gap-x-4 bg-transparent pl-4 pr-[120px] sm:pl-6">
+      <Link href="/" aria-label="Opaquely" className="flex h-16 shrink-0 items-center justify-self-start">
         <Image
           src={BRAND.wordmark}
           alt="Opaquely"
@@ -23,15 +24,13 @@ export function AppHeader() {
           priority
           width={Math.round(WORDMARK_HEIGHT * WORDMARK_RATIO)}
           height={WORDMARK_HEIGHT}
-          className="hidden h-9 w-auto sm:block"
+          className="hidden h-10 w-auto sm:block"
         />
         <Image src={BRAND.icon} alt="" unoptimized priority width={40} height={40} className="h-10 w-10 sm:hidden" />
       </Link>
       <SiteNav />
-      <div className="ml-auto flex min-h-16 min-w-0 items-center justify-end gap-x-3 py-2">
-        <span className="hidden sm:inline-flex">
-          <NetworkBadge />
-        </span>
+      {/* From 768px the wallet lives inside the nav pill; below that the nav is hidden, so it sits here. */}
+      <div className="flex min-h-16 min-w-0 items-center justify-end gap-x-3 justify-self-end py-2 md:hidden">
         <ConnectButton showBalance={false} accountStatus={{ smallScreen: "avatar", largeScreen: "address" }} />
       </div>
       {/* Fixed overlay; its Menu toggle is drawn in the 120px reserved at the right of the header. */}
