@@ -5,6 +5,7 @@ import { GeistMono } from "geist/font/mono";
 import { Providers } from "./providers";
 import { AppFooter } from "@/components/AppFooter";
 import { AppHeader } from "@/components/AppHeader";
+import { SiteBackground } from "@/components/SiteBackground";
 import { DeploymentGuard } from "@/components/DeploymentGuard";
 import { NetworkGate } from "@/components/NetworkGate";
 import "./globals.css";
@@ -24,6 +25,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         >
           Skip to content
         </a>
+        <SiteBackground />
         <Providers>
           {/* Footer at the bottom of the flow: after the content on long pages, at the viewport bottom on short ones. */}
           <div className="flex min-h-dvh flex-col">

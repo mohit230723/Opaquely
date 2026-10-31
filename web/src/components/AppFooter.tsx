@@ -37,7 +37,7 @@ export function AppFooter() {
   const scope = useDataScope();
 
   return (
-    <footer className="border-t border-border bg-surface px-4 pb-6 pt-12 text-sm text-muted sm:px-6">
+    <footer className="border-t border-white/10 bg-[#050816]/60 px-4 backdrop-blur-xl pb-6 pt-12 text-sm text-muted sm:px-6">
       <div className="mx-auto w-full max-w-6xl">
         <div className="grid grid-cols-1 gap-8 sm:grid-cols-2 lg:grid-cols-4">
           {/* Brand block: the wordmark is a plain image, not a link (only the header logo links home). */}
