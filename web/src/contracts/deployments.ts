@@ -1459,11 +1459,11 @@ export const deployments = {
   },
   "11155111": {
     "chainId": 11155111,
-    "deployedAt": "2026-10-31T10:01:50.117Z",
-    "deployBlock": 12033103,
+    "deployedAt": "2026-10-31T17:58:27.186Z",
+    "deployBlock": 12035477,
     "anomalyThresholdCents": "500000",
     "DatasetRegistry": {
-      "address": "0x6d5Cd54C8c6d88FFE21BeA0aBAe342Dff9ddDD3f",
+      "address": "0xC8afA45f6599E4A63713a9f18118aE9B03520513",
       "abi": [
         {
           "inputs": [
@@ -1495,6 +1495,11 @@ export const deployments = {
         {
           "inputs": [],
           "name": "InvalidMarketplace",
+          "type": "error"
+        },
+        {
+          "inputs": [],
+          "name": "InvalidMonthStart",
           "type": "error"
         },
         {
@@ -1636,6 +1641,25 @@ export const deployments = {
             }
           ],
           "name": "DatasetSealed",
+          "type": "event"
+        },
+        {
+          "anonymous": false,
+          "inputs": [
+            {
+              "indexed": true,
+              "internalType": "uint256",
+              "name": "datasetId",
+              "type": "uint256"
+            },
+            {
+              "indexed": false,
+              "internalType": "uint32",
+              "name": "monthStart",
+              "type": "uint32"
+            }
+          ],
+          "name": "InsightsSet",
           "type": "event"
         },
         {
@@ -2039,6 +2063,45 @@ export const deployments = {
               "internalType": "uint256",
               "name": "datasetId",
               "type": "uint256"
+            }
+          ],
+          "name": "getInsights",
+          "outputs": [
+            {
+              "internalType": "uint32",
+              "name": "monthStart",
+              "type": "uint32"
+            },
+            {
+              "internalType": "euint64[6]",
+              "name": "monthTotals",
+              "type": "bytes32[6]"
+            },
+            {
+              "internalType": "euint64",
+              "name": "forecast",
+              "type": "bytes32"
+            },
+            {
+              "internalType": "euint32",
+              "name": "mlAnomalyCount",
+              "type": "bytes32"
+            },
+            {
+              "internalType": "euint32[5]",
+              "name": "scoreBuckets",
+              "type": "bytes32[5]"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "uint256",
+              "name": "datasetId",
+              "type": "uint256"
             },
             {
               "internalType": "address",
@@ -2070,6 +2133,25 @@ export const deployments = {
               "internalType": "bool",
               "name": "",
               "type": "bool"
+            }
+          ],
+          "stateMutability": "view",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
+              "internalType": "uint256",
+              "name": "",
+              "type": "uint256"
+            }
+          ],
+          "name": "insightsMonthStart",
+          "outputs": [
+            {
+              "internalType": "uint32",
+              "name": "",
+              "type": "uint32"
             }
           ],
           "stateMutability": "view",
@@ -2115,6 +2197,39 @@ export const deployments = {
         {
           "inputs": [
             {
+              "internalType": "uint256",
+              "name": "datasetId",
+              "type": "uint256"
+            },
+            {
+              "internalType": "uint32",
+              "name": "monthStart",
+              "type": "uint32"
+            },
+            {
+              "internalType": "externalEuint64[7]",
+              "name": "u64s",
+              "type": "bytes32[7]"
+            },
+            {
+              "internalType": "externalEuint32[6]",
+              "name": "u32s",
+              "type": "bytes32[6]"
+            },
+            {
+              "internalType": "bytes",
+              "name": "inputProof",
+              "type": "bytes"
+            }
+          ],
+          "name": "setInsights",
+          "outputs": [],
+          "stateMutability": "nonpayable",
+          "type": "function"
+        },
+        {
+          "inputs": [
+            {
               "internalType": "address",
               "name": "marketplace_",
               "type": "address"
@@ -2128,7 +2243,7 @@ export const deployments = {
       ]
     },
     "Marketplace": {
-      "address": "0xcdf3c5878F64C32aEF41eaDB3F21e0EE7F2EF3F7",
+      "address": "0xcfB0Ea6F41fde50ED98cceB07D655F96AE791ccc",
       "abi": [
         {
           "inputs": [
@@ -2831,6 +2946,11 @@ export const deployments = {
         {
           "inputs": [],
           "name": "InvalidMarketplace",
+          "type": "error"
+        },
+        {
+          "inputs": [],
+          "name": "InvalidMonthStart",
           "type": "error"
         },
         {

@@ -1,0 +1,360 @@
+{
+  "generatedAt": "2026-10-31T17:25:52.740475+00:00",
+  "data": "synthetic",
+  "anomaly": {
+    "model": "LogisticRegression",
+    "nBits": 8,
+    "features": [
+      "log amount",
+      "category (one-hot, 6)",
+      "weekday",
+      "day of month"
+    ],
+    "trainSize": 4500,
+    "testSize": 1500,
+    "accuracy": 0.9346666666666666,
+    "precision": 0.5594059405940595,
+    "recall": 0.9262295081967213,
+    "f1": 0.6975308641975309,
+    "confusion": {
+      "tn": 1289,
+      "fp": 89,
+      "fn": 9,
+      "tp": 113
+    },
+    "fhe": {
+      "samples": 40,
+      "agreement": 1.0,
+      "msPerBill": 34.95674397499897
+    },
+    "amountHistogram": {
+      "edgesRupees": [
+        100.0,
+        138.0,
+        190.0,
+        262.0,
+        361.0,
+        498.0,
+        685.0,
+        943.0,
+        1299.0,
+        1788.0,
+        2461.0,
+        3387.0,
+        4662.0,
+        6416.0,
+        8830.0,
+        12152.0,
+        16725.0,
+        23018.0,
+        31678.0,
+        43597.0,
+        60000.0
+      ],
+      "normal": [
+        0,
+        2,
+        16,
+        47,
+        112,
+        154,
+        250,
+        228,
+        220,
+        169,
+        92,
+        48,
+        21,
+        12,
+        5,
+        2,
+        0,
+        0,
+        0,
+        0
+      ],
+      "anomalous": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+        1,
+        7,
+        5,
+        11,
+        14,
+        11,
+        25,
+        12,
+        15,
+        12,
+        5,
+        2,
+        1
+      ]
+    },
+    "scoreHistogram": {
+      "edges": [
+        0.0,
+        0.1,
+        0.2,
+        0.3,
+        0.4,
+        0.5,
+        0.6,
+        0.7,
+        0.8,
+        0.9,
+        1.0
+      ],
+      "normal": [
+        1048,
+        119,
+        57,
+        38,
+        27,
+        19,
+        22,
+        20,
+        10,
+        18
+      ],
+      "anomalous": [
+        2,
+        2,
+        3,
+        0,
+        2,
+        3,
+        2,
+        4,
+        9,
+        95
+      ]
+    },
+    "perCategory": [
+      {
+        "category": "Utilities",
+        "bills": 199,
+        "anomalies": 20,
+        "flagged": 21
+      },
+      {
+        "category": "Groceries/Food",
+        "bills": 462,
+        "anomalies": 33,
+        "flagged": 55
+      },
+      {
+        "category": "Medical",
+        "bills": 147,
+        "anomalies": 8,
+        "flagged": 14
+      },
+      {
+        "category": "Transport/Fuel",
+        "bills": 279,
+        "anomalies": 22,
+        "flagged": 36
+      },
+      {
+        "category": "Shopping",
+        "bills": 246,
+        "anomalies": 20,
+        "flagged": 49
+      },
+      {
+        "category": "Other",
+        "bills": 167,
+        "anomalies": 19,
+        "flagged": 27
+      }
+    ]
+  },
+  "forecast": {
+    "model": "LinearRegression",
+    "nBits": 8,
+    "features": [
+      "last 3 monthly totals",
+      "target month (sin, cos)"
+    ],
+    "trainSize": 10560,
+    "testSize": 2640,
+    "maeRupees": 2474.2439017011134,
+    "r2": 0.9571662118527938,
+    "fhe": {
+      "samples": 10,
+      "maxAbsDiffRupees": 0.0
+    },
+    "backtest": [
+      {
+        "month": 3,
+        "actual": 47638,
+        "predicted": 45026
+      },
+      {
+        "month": 4,
+        "actual": 43209,
+        "predicted": 42283
+      },
+      {
+        "month": 5,
+        "actual": 39052,
+        "predicted": 40212
+      },
+      {
+        "month": 6,
+        "actual": 42114,
+        "predicted": 39782
+      },
+      {
+        "month": 7,
+        "actual": 33821,
+        "predicted": 42588
+      },
+      {
+        "month": 8,
+        "actual": 37429,
+        "predicted": 40616
+      },
+      {
+        "month": 9,
+        "actual": 41258,
+        "predicted": 42122
+      },
+      {
+        "month": 10,
+        "actual": 45563,
+        "predicted": 45842
+      },
+      {
+        "month": 11,
+        "actual": 51762,
+        "predicted": 49212
+      },
+      {
+        "month": 12,
+        "actual": 51526,
+        "predicted": 51516
+      },
+      {
+        "month": 13,
+        "actual": 48679,
+        "predicted": 51050
+      },
+      {
+        "month": 14,
+        "actual": 49805,
+        "predicted": 48002
+      },
+      {
+        "month": 15,
+        "actual": 42346,
+        "predicted": 46003
+      },
+      {
+        "month": 16,
+        "actual": 36927,
+        "predicted": 40123
+      },
+      {
+        "month": 17,
+        "actual": 33677,
+        "predicted": 35578
+      },
+      {
+        "month": 18,
+        "actual": 30658,
+        "predicted": 34000
+      },
+      {
+        "month": 19,
+        "actual": 34481,
+        "predicted": 33561
+      },
+      {
+        "month": 20,
+        "actual": 35567,
+        "predicted": 36663
+      },
+      {
+        "month": 21,
+        "actual": 41466,
+        "predicted": 39630
+      },
+      {
+        "month": 22,
+        "actual": 46644,
+        "predicted": 45519
+      },
+      {
+        "month": 23,
+        "actual": 49672,
+        "predicted": 49759
+      },
+      {
+        "month": 24,
+        "actual": 48159,
+        "predicted": 50880
+      },
+      {
+        "month": 25,
+        "actual": 53266,
+        "predicted": 48665
+      },
+      {
+        "month": 26,
+        "actual": 42015,
+        "predicted": 49158
+      },
+      {
+        "month": 27,
+        "actual": 42873,
+        "predicted": 42588
+      },
+      {
+        "month": 28,
+        "actual": 36908,
+        "predicted": 38742
+      },
+      {
+        "month": 29,
+        "actual": 34540,
+        "predicted": 34700
+      },
+      {
+        "month": 30,
+        "actual": 30751,
+        "predicted": 34628
+      },
+      {
+        "month": 31,
+        "actual": 31421,
+        "predicted": 33857
+      },
+      {
+        "month": 32,
+        "actual": 38026,
+        "predicted": 35004
+      },
+      {
+        "month": 33,
+        "actual": 35555,
+        "predicted": 40078
+      },
+      {
+        "month": 34,
+        "actual": 44417,
+        "predicted": 42453
+      },
+      {
+        "month": 35,
+        "actual": 42927,
+        "predicted": 46989
+      }
+    ]
+  }
+}
