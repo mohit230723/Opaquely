@@ -10,14 +10,14 @@
   z-index: -1;
   overflow: hidden;
   pointer-events: none;
-  background: radial-gradient(120% 80% at 50% 0%, #0a1240 0%, #050816 55%, #03050f 100%);
+  background: radial-gradient(120% 80% at 50% 0%, #070c2a 0%, #03050f 55%, #010208 100%);
 }
 
 .site-bg__aurora {
   position: absolute;
   border-radius: 9999px;
-  filter: blur(110px);
-  opacity: 0.55;
+  filter: blur(120px);
+  opacity: 0.32;
   will-change: transform;
 }
 
@@ -36,7 +36,7 @@
   right: -12vw;
   top: 48vh;
   background: radial-gradient(circle, #38bdf8 0%, rgba(56, 189, 248, 0) 70%);
-  opacity: 0.32;
+  opacity: 0.16;
   animation: site-bg-drift-b 46s ease-in-out infinite alternate;
 }
 
@@ -46,14 +46,14 @@
   left: 20vw;
   bottom: -22vw;
   background: radial-gradient(ellipse, #3b2db8 0%, rgba(59, 45, 184, 0) 70%);
-  opacity: 0.38;
+  opacity: 0.22;
   animation: site-bg-drift-c 54s ease-in-out infinite alternate;
 }
 
 .site-bg__grid {
   position: absolute;
   inset: 0;
-  background-image: radial-gradient(rgba(165, 216, 255, 0.16) 1px, transparent 1.4px);
+  background-image: radial-gradient(rgba(165, 216, 255, 0.10) 1px, transparent 1.4px);
   background-size: 24px 24px;
   -webkit-mask-image: radial-gradient(ellipse 75% 65% at 50% 40%, #000 20%, transparent 100%);
   mask-image: radial-gradient(ellipse 75% 65% at 50% 40%, #000 20%, transparent 100%);
@@ -65,7 +65,7 @@
   right: 0;
   top: -30vh;
   height: 30vh;
-  background: linear-gradient(to bottom, rgba(56, 189, 248, 0), rgba(56, 189, 248, 0.06) 70%, rgba(165, 216, 255, 0.12) 100%);
+  background: linear-gradient(to bottom, rgba(56, 189, 248, 0), rgba(56, 189, 248, 0.04) 70%, rgba(165, 216, 255, 0.08) 100%);
   -webkit-mask-image: radial-gradient(rgba(0, 0, 0, 1) 1px, transparent 1.4px);
   mask-image: radial-gradient(rgba(0, 0, 0, 1) 1px, transparent 1.4px);
   -webkit-mask-size: 24px 24px;
@@ -83,7 +83,7 @@
 .site-bg__vignette {
   position: absolute;
   inset: 0;
-  background: radial-gradient(ellipse at center, transparent 55%, rgba(2, 4, 12, 0.7) 100%);
+  background: radial-gradient(ellipse at center, transparent 45%, rgba(0, 1, 6, 0.85) 100%);
 }
 
 @keyframes site-bg-drift-a {

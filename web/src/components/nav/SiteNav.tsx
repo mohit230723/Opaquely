@@ -13,14 +13,15 @@ const NAV_STYLE = {
   "--gn-x": "20px",
 };
 
-// Glass pill drawn here (not by GooeyNav) so the wallet button sits inside it: a light translucent tint,
+// Dark glass pill drawn here (not by GooeyNav) so the wallet button sits inside it: a dark translucent tint
+// (so the light labels read over the bright hero as well as the dark pages),
 // a backdrop blur of whatever scrolls behind, a thin bright rim and a soft drop shadow.
 const FRAME_STYLE = {
-  background: "linear-gradient(135deg, rgba(255,255,255,0.16), rgba(255,255,255,0.05))",
+  background: "linear-gradient(135deg, rgba(5,8,22,0.72), rgba(11,18,48,0.55))",
   backdropFilter: "blur(18px) saturate(170%)",
   WebkitBackdropFilter: "blur(18px) saturate(170%)",
-  border: "1px solid rgba(255,255,255,0.22)",
-  boxShadow: "0 8px 32px rgba(5,8,22,0.35), inset 0 1px 0 rgba(255,255,255,0.25)",
+  border: "1px solid rgba(165,216,255,0.18)",
+  boxShadow: "0 8px 32px rgba(0,0,0,0.5), inset 0 1px 0 rgba(165,216,255,0.15)",
 };
 
 const WALLET_CLASS =
