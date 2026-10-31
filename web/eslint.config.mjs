@@ -18,6 +18,7 @@ export default defineConfig([
     // type-checked, and the guardrails walker and the 07-03 pattern re-scan still cover the .jsx sources.
     "src/components/ui/GooeyNav.jsx",
     "src/components/ui/StaggeredMenu.jsx",
+    "src/components/ui/TiltedCard.jsx",
     "src/components/ui/SpecularButton.jsx",
   ]),
   {
