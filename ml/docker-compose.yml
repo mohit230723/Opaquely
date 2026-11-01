@@ -23,7 +23,9 @@ services:
     build: .
     command: uvicorn helper:app --host 0.0.0.0 --port 8765
     environment:
-      FHE_SERVER_URL: http://server:8000
+      # Both can be overridden from the shell (docs/DEPLOY.md): a remote FHE server, and a deployed web origin.
+      FHE_SERVER_URL: ${FHE_SERVER_URL:-http://server:8000}
+      WEB_ORIGINS: ${WEB_ORIGINS:-http://localhost:3000,http://127.0.0.1:3000}
     volumes:
       - artifacts:/artifacts
     ports:
